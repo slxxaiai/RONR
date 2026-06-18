@@ -1,0 +1,10 @@
+{
+  "providerProfileId": "ppio-default",
+  "displayName": "PPIO",
+  "protocol": "openai-compatible",
+  "baseURL": "https://api.ppio.com/openai/v1",
+  "apiKey": "replace-with-your-local-api-key",
+  "timeoutMs": 30000,
+  "temperatureDefault": 0.2,
+  "maxTokensDefault": 1200
+}

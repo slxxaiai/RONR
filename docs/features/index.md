@@ -23,6 +23,7 @@
 | User Interruption | 草稿 | 中 | P1 | [user-interruption.md](user-interruption.md) |
 | Session Template | 草稿 | 中 | P1 | [session-template.md](session-template.md) |
 | Quality Review | 草稿 | 中 | P1 | [quality-review.md](quality-review.md) |
+| V0 Runnable Product Slice | 完成 | 高 | P0 | [v0-runnable-product-slice.md](v0-runnable-product-slice.md) |
 
 ## Dependency Order
 

@@ -4,7 +4,27 @@
 
 ## Local Setup
 
-当前除标准 shell 工具外，尚不需要包管理器或语言运行时。
+当前使用 Node.js、npm、Next.js App Router、TypeScript、Zod 和 Vitest。
+
+首次安装依赖：
+
+```sh
+npm install
+```
+
+如本地网络需要代理，可先设置：
+
+```sh
+export https_proxy=http://127.0.0.1:7890 http_proxy=http://127.0.0.1:7890 all_proxy=socks5://127.0.0.1:7891
+```
+
+复制 provider 配置模板：
+
+```sh
+cp config/provider.example.json config/provider.local.json
+```
+
+`config/provider.local.json` 用于填写本地 API key，已被 Git 忽略，不得提交。
 
 ## Commands
 
@@ -14,8 +34,11 @@ scripts/lint.sh
 scripts/test.sh
 ```
 
-这些脚本在接入具体实现栈前都是占位入口。添加工具链时，需要同步更新脚本和
-本文档。
+当前脚本已接入：
+
+- `scripts/dev.sh` -> `npm run dev`
+- `scripts/lint.sh` -> `npm run lint`
+- `scripts/test.sh` -> `npm test`
 
 ## Debugging
 

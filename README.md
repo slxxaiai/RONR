@@ -2,7 +2,7 @@
 
 RONR AI 是一个面向个人决策的多 AI Agent 议事系统，用轻量 Robert's Rules of Order 流程组织多个 Agent 讨论、质疑、修正和表决，并输出带证据链的行动清单。
 
-本项目目前处于可继续实现的工程骨架阶段。在选择具体语言栈之前，先固定文档、源码、测试和脚本入口的组织方式。
+本项目当前已进入 v0 可运行纵切阶段：首个 Web 产品入口使用 Next.js App Router、TypeScript、Zod 和 Vitest，支持 PPIO OpenAI-compatible provider、模型列表、角色配置和单次议事结果展示。
 
 ## Default Language
 
@@ -16,6 +16,10 @@ RONR AI 是一个面向个人决策的多 AI Agent 议事系统，用轻量 Robe
 |-- AGENTS.md
 |-- CHANGELOG.md
 |-- .gitignore
+|-- package.json
+|-- package-lock.json
+|-- config/
+|   `-- provider.example.json
 |-- docs/
 |   |-- architecture.md
 |   |-- development.md
@@ -47,15 +51,17 @@ RONR AI 是一个面向个人决策的多 AI Agent 议事系统，用轻量 Robe
 ## Directory Purpose
 
 - `docs/` 存放项目说明、架构、开发、路线图和功能规划文档。
+- `config/provider.example.json` 是本地 provider 配置模板；真实密钥写入
+  `config/provider.local.json`，该文件已被 Git 忽略，不能提交。
 - `docs/glossary.md` 维护核心术语的多语言对照，用于协议、文档和 UI 本地化。
 - `docs/tech-stack.md` 记录 Web-first 技术选型、跨端策略和后续 monorepo 演进方向。
 - `docs/features/` 独立跟踪重要 RONR 功能，包括状态、范围、验收标准和
   设计说明。
-- `apps/web/` 预留给首个 Web 产品入口。
+- `apps/web/` 存放首个 Next.js Web 产品入口、API routes、本地化资源和 UI。
 - `packages/core/` 预留给核心 AI Agent 议事流程、议事状态机、角色治理和证据链逻辑。
-- `packages/agents/` 预留给 Role Agent Runtime、角色定义、可配置 prompt template 和输出 schema。
-- `packages/providers/` 预留给模型供应商适配层；首版优先实现 OpenAI-compatible adapter 和 PPIO preset。
-- `packages/contracts/` 预留给 API request / response、会话事件和流式事件 schema。
+- `packages/agents/` 存放 Role Agent Runtime、顺序角色调用和 Agent 输出 schema 校验。
+- `packages/providers/` 存放模型供应商适配层；v0 实现 OpenAI-compatible adapter 和 PPIO preset。
+- `packages/contracts/` 存放 API request / response、Agent 配置、会话快照和 provider model schema。
 - `tests/unit/` 预留给纯逻辑的单元测试。
 - `tests/integration/` 预留给 API、持久化和模块协作的集成测试。
 - `tests/fixtures/` 存放可复用测试数据。
@@ -63,8 +69,7 @@ RONR AI 是一个面向个人决策的多 AI Agent 议事系统，用轻量 Robe
 
 ## Development Commands
 
-当前尚未配置具体语言栈或测试框架。以下脚本入口会在工具链接入前明确
-提示“尚未配置”，避免误以为已有可运行命令：
+当前使用 npm 管理 Web-first TypeScript 工具链：
 
 ```sh
 scripts/dev.sh
@@ -72,4 +77,17 @@ scripts/lint.sh
 scripts/test.sh
 ```
 
-引入具体语言栈时，需要同步更新这些脚本，并在本节记录底层命令。
+底层命令分别是 `npm run dev`、`npm run lint` 和 `npm test`。
+
+首次本地运行前：
+
+```sh
+npm install
+cp config/provider.example.json config/provider.local.json
+```
+
+在 `config/provider.local.json` 中填写 PPIO API key 后运行：
+
+```sh
+scripts/dev.sh
+```

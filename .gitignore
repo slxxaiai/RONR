@@ -12,9 +12,12 @@ temp/
 .env
 .env.*
 !.env.example
+*.local.json
+config/provider.local.json
 
 # 依赖和构建输出目录
 node_modules/
+**/.next/
 dist/
 build/
 target/
