@@ -6,7 +6,7 @@
 
 ## Status
 
-草稿
+完成
 
 ## Priority
 

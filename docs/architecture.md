@@ -333,6 +333,8 @@ Orchestrator 可以包含重试、超时、模型失败降级等运行时逻辑�
 
 Agent Runtime 负责把角色模板、职责授权、当前阶段和证据上下文转换为模型可执行任务。
 
+Agent Runtime 默认在每个 Agent 表达观点前执行联网搜索，生成 `Search Result Summary` 和 `Source Reference` 后再调用模型。模型调用默认启用 thinking / reasoning 配置，但原始 chain-of-thought 不得进入 session snapshot、event log、trace 或 UI。
+
 MVP 默认基础角色：
 
 - `Chair`：确认议题、控制阶段、处理插话、组织表决。
@@ -353,6 +355,7 @@ Agent Runtime 应提供统一输出约束：
 
 - 每次输出都带 `agentId`、`role`、`phase`。
 - 发言必须区分 `claim`、`assumption`、`risk`、`recommendation`。
+- 发言必须引用搜索摘要或明确的搜索失败记录。
 - 反对意见必须关联到目标 `motionId` 或明确说明它反对的是整体方向。
 - 表决必须输出明确 `position` 和理由。
 - 行动建议必须引用来源，不能只给结论。
@@ -370,12 +373,17 @@ Agent Runtime 应提供统一输出约束：
 - `temperature`
 - `maxTokens`
 - `timeout`
+- `webSearchEnabled`
+- `thinkingEnabled`
+- `thinkingBudget`
 
 适配层职责：
 
 - 构造供应商请求。
 - 处理供应商响应。
 - 将响应转换为 Agent Runtime 需要的结构。
+- 适配 provider 原生搜索能力或接入独立 Search Provider 的结果。
+- 适配 provider thinking / reasoning 参数，并过滤原始推理链。
 - 标准化错误，例如超时、限流、鉴权失败、结构化输出解析失败。
 
 适配层不负责决定议事阶段，不负责修改证据链，也不负责判断行动项是否可接受。

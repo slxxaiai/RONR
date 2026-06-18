@@ -111,6 +111,9 @@
 | Trade-off | 取舍 | 取捨 | トレードオフ | 트레이드오프 | Benefit-cost tension between options. |
 | Source Speech | 来源发言 | 來源發言 | 出典発言 | 출처 발언 | Speech used as evidence for an output item. |
 | Source Reference | 来源引用 | 來源引用 | 出典参照 | 출처 참조 | Structured reference to a user input, attachment, speech, objection, vote, reservation, or external source summary. |
+| Web Search Before Speech | 发言前联网搜索 | 發言前聯網搜尋 | 発言前Web検索 | 발언 전 웹 검색 | Required runtime step where an Agent searches external information before expressing a view. |
+| Search Result Summary | 搜索结果摘要 | 搜尋結果摘要 | 検索結果要約 | 검색 결과 요약 | Structured summary of search results with source references. |
+| Search Source | 搜索来源 | 搜尋來源 | 検索ソース | 검색 출처 | Source returned by web search and referenced by Agent output. |
 | User Interruption Impact | 用户插话影响 | 使用者插話影響 | ユーザー割り込みの影響 | 사용자 개입 영향 | How a user interruption changed an Action Item, constraint, priority, or stage. |
 | Minority View | 少数意见 | 少數意見 | 少数意見 | 소수 의견 | Dissenting or non-consensus view preserved in the output. |
 
@@ -142,6 +145,10 @@
 | OpenAI-compatible Provider | OpenAI 兼容提供方 | OpenAI 相容提供方 | OpenAI 互換プロバイダー | OpenAI 호환 제공자 | Provider that exposes an OpenAI-compatible API surface. |
 | Provider Profile | 提供方配置档案 | 提供方設定檔 | プロバイダープロファイル | 제공자 프로필 | Named provider configuration used by Agent Runtime without exposing secrets. |
 | Secret Reference | 密钥引用 | 金鑰引用 | シークレット参照 | 시크릿 참조 | Server-side reference to a secret value, such as an environment variable. |
+| Search Provider | 搜索提供方 | 搜尋提供方 | 検索プロバイダー | 검색 제공자 | Provider or tool used to retrieve web search results. |
+| Thinking Mode | Thinking 模式 | Thinking 模式 | Thinking モード | Thinking 모드 | Provider or runtime configuration that enables deeper model reasoning without exposing raw reasoning text. |
+| Thinking Budget | Thinking 预算 | Thinking 預算 | Thinking 予算 | Thinking 예산 | Optional reasoning token, effort, or budget configuration. |
+| Raw Chain-of-Thought | 原始推理链 | 原始推理鏈 | 生の思考過程 | 원시 사고 과정 | Internal model reasoning text that must not be stored or shown. |
 | Session Template | 会话模板 | 會話模板 | セッションテンプレート | 세션 템플릿 | Reusable session setup with predefined agents and mandates. |
 | Quality Review | 质量检查 | 品質檢查 | 品質レビュー | 품질 검토 | Minimum review before final Action Plan output. |
 

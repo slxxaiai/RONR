@@ -30,6 +30,7 @@ RONR 要解决的问题是：如何把多个 AI 的观点组织成一个有程�
 
 - 降低用户综合多个模型观点的成本。
 - 通过议事义务和特定 mandate 显性暴露盲点。
+- 每个 Agent 在表达观点前先搜索最新信息，并把外部依据纳入证据链。
 - 用议事流程约束 Agent，避免无序讨论。
 - 让最终行动项可追溯到发言、分歧、风险和表决。
 - 支持用户随时插话、暂停、追问和重开讨论。
@@ -54,7 +55,7 @@ MVP 支持一个完整议事闭环：
 3. 每个 Agent 由 `model + role + mandate` 组成。
 4. 系统将用户问题转成主议题。
 5. Chair Agent 推进轻量议事流程。
-6. 各 Agent 按角色轮流发言。
+6. 各 Agent 在联网搜索并启用 thinking 模式后，按角色轮流发言。
 7. 系统提取候选方案、支持理由、反对意见、风险和假设。
 8. Chair Agent 组织简化表决或共识确认。
 9. Secretary Agent 生成最终行动清单。
@@ -71,6 +72,7 @@ MVP 支持一个完整议事闭环：
 - **Mandate / 职责授权**：Agent 在本场议事中的目标、边界和禁止行为。
 - **Motion / 动议**：可被讨论、修正和表决的候选主张。
 - **Speech / 发言**：Agent 在某个阶段的结构化表达。
+- **Web Search Before Speech / 发言前联网搜索**：Agent 在表达观点前先搜索外部信息，并以来源引用支撑观点。
 - **Objection / 反对意见**：对候选方案的风险、漏洞或替代观点。
 - **Vote / 表决**：Agent 对候选方案的立场，`position` 枚举固定为 `support`、`oppose`、`abstain`、`qualified_support`。
 - **Reservation / 保留意见**：附加在表决或建议上的非阻断性顾虑，不是 `Vote.position` 枚举值。

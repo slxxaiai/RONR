@@ -6,7 +6,7 @@
 
 ## Status
 
-草稿
+进行中
 
 ## Priority
 
@@ -241,7 +241,9 @@ P0 固定阶段值：
 
 - `phase` 必须记录 Speech 生成时的阶段值。
 - `claims`、`assumptions` 和 `references` 必须结构化，便于后续提取风险、分歧和行动来源。
-- `references` 使用 `Source Reference` 表达来源，可以指向用户问题、附件、前序 Speech、Objection、Vote 或外部资料摘要。
+- `references` 使用 `Source Reference` 表达来源，可以指向用户问题、附件、前序 Speech、Objection、Vote、`Search Result Summary` 或外部资料摘要。
+- Agent 在表达观点前的联网搜索结果必须以摘要和来源引用形式进入 `references`，不能保存完整网页抓取内容。
+- 模型 thinking / reasoning 的原始推理链不得进入 `Speech.content`、`claims`、`assumptions` 或 `references`。
 - 同一 Agent 在同一阶段可以有多条 Speech，但必须保留顺序。
 
 #### `Objection`
@@ -478,6 +480,7 @@ flowchart TD
 
 - 所有 `sourceSpeechIds`、`sourceObjectionIds`、`sourceVoteIds` 和 `sourceReservationIds` 必须存在于同一 session。
 - `Speech.agentId` 必须引用同一 session 的 Agent。
+- `Speech.references` 中的搜索来源必须包含可展示标题、来源 URL 或 provider source id、摘要和检索时间。
 - `Objection.motionId`、`Vote.motionId` 必须引用同一 session 的 Motion。
 - `Reservation.targetId` 必须存在，并且类型必须匹配 `targetType`。
 - Action Item 不能引用被删除或跨 session 的对象。
@@ -496,6 +499,13 @@ flowchart TD
 - 所有协议字段、枚举和 ID 使用英文 canonical value。
 - 用户可见标题、摘要、Action Item 和风险说明应按 session `locale` 输出。
 - 新增状态、阶段、字段或输出术语时，必须同步更新 `docs/glossary.md`。
+
+#### Search and Thinking Validation
+
+- 需要表达观点的 Agent 输出必须关联 `Search Result Summary` 或明确的 search error。
+- 搜索失败时不得伪造 `Source Reference`。
+- 原始 chain-of-thought 不得写入 session snapshot、event log、trace 或 Action Plan。
+- thinking / reasoning 只能以可展示理由、假设、风险和来源引用的形式进入结构化输出。
 
 #### Cancellation Validation
 
@@ -526,7 +536,7 @@ flowchart TD
 ## Multilingual and Glossary Impact
 
 - 本 feature 复用 `docs/glossary.md` 中已有的 `Deliberation Session`、`Agent`、`Motion`、`Speech`、`Objection`、`Vote`、`Reservation`、`Action Plan`、`Action Item`、`Evidence Chain`、`Stage`、`State Machine`。
-- 本 feature 新增或细化 `Session Status`、`Session Snapshot`、`Session Locale`、`Motion Status`、`Objection Type`、`Objection Severity`、`Resolution Status`、`Source Reference`、`User Interruption Impact`、`Max Deliberation Rounds`、`Deliberation Round Count`、`Convergence Check`、`Convergence Status`。
+- 本 feature 新增或细化 `Session Status`、`Session Snapshot`、`Session Locale`、`Motion Status`、`Objection Type`、`Objection Severity`、`Resolution Status`、`Source Reference`、`User Interruption Impact`、`Max Deliberation Rounds`、`Deliberation Round Count`、`Convergence Check`、`Convergence Status`、`Search Result Summary`、`Thinking Mode`。
 - 本 feature 将 `SessionStatus.cancelled` 固定为用户主动放弃本次议事的终态。
 - 协议字段和枚举保持英文 canonical value，不随 UI 语言翻译。
 - `locale` 只影响用户可见输出，不影响对象关系和校验规则。
@@ -550,10 +560,12 @@ flowchart TD
 - 给定用户主动放弃议事，会话进入 `cancelled`，保留已有记录，且不要求生成 Action Plan。
 - 给定用户设置最大讨论轮次，达到上限后状态模型不得继续追加 Deliberation 轮次。
 - 给定用户未设置最大讨论轮次，系统必须通过 `Convergence Check` 判断是否进入表决。
+- 给定 Agent 输出外部事实判断但缺少搜索来源或搜索失败记录，状态模型校验失败。
+- 给定 Agent 输出包含原始 chain-of-thought，状态模型校验失败。
 
 ## Verification Plan
 
-- 自动化测试：覆盖 session status 转换、stage 前置条件、角色数量、Vote.position 枚举、Reservation 分离、引用完整性、Action Item trace、最大讨论轮次、AI 自动收敛判断。
+- 自动化测试：覆盖 session status 转换、stage 前置条件、角色数量、Vote.position 枚举、Reservation 分离、引用完整性、Action Item trace、搜索来源引用、thinking 原始推理泄漏、最大讨论轮次、AI 自动收敛判断。
 - fixture 验证：提供一个最小完整 Deliberation Session fixture，一个缺少证据链 fixture，一个包含用户插话和 Reservation 的 fixture。
 - 人工检查：核对字段命名与 PRD、Architecture、Glossary 一致，确认产品定位仍为个人决策场景下的多 AI Agent 议事系统。
 - 不需要测试的理由：不适用，该 feature 是 core domain 基础。

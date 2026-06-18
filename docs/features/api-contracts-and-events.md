@@ -6,7 +6,7 @@
 
 ## Status
 
-草稿
+进行中
 
 ## Priority
 
@@ -77,4 +77,3 @@ RONR 的 Web 入口、Role Runtime、Provider Adapter 和 Core Domain 需要通�
 ## Rollout
 
 先定义 P0 创建会话、推进会话、读取 snapshot 和错误响应契约；后续再扩展实时事件和历史记录查询契约。
-

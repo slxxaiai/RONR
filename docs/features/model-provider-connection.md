@@ -6,7 +6,7 @@
 
 ## Status
 
-草稿
+进行中
 
 ## Priority
 
@@ -27,6 +27,8 @@ RONR 的最小 Web 闭环需要真实模型参与，而不是只靠 mock 或 fix
 
 - 支持 OpenAI-compatible Provider，并用 PPIO 作为首个真实 provider preset。
 - 将模型调用与 core domain 解耦。
+- 支持联网搜索能力，使 Agent 在表达观点前可以获得外部信息来源。
+- 默认启用模型 thinking / reasoning 配置，并防止原始推理链进入事件日志或 UI。
 - 通过服务端 Bearer token 鉴权调用模型，不让浏览器、core、prompt template 或事件日志接触明文 API key。
 - 标准化模型调用失败、供应商错误和结构化输出失败。
 - 优先复用 Web runtime 的 `fetch` 和现有 schema 校验能力，不为首版引入供应商 SDK。
@@ -69,6 +71,9 @@ Provider 配置应表达为 `Provider Profile`，而不是把供应商细节散�
 - `maxTokensDefault`：默认 `max_tokens`。
 - `temperatureDefault`：默认 `temperature`。
 - `structuredOutputMode`：`json_schema`、`json_object` 或 `text`。
+- `webSearchEnabledDefault`：默认是否允许联网搜索，RONR 默认开启。
+- `thinkingEnabledDefault`：默认是否启用 thinking / reasoning，RONR 默认开启。
+- `thinkingBudgetDefault`：可选 reasoning token / effort / budget 配置。
 
 `apiKeySecretRef` 指向服务端环境变量或后续 secret store。任何 API response、event log、prompt template、debug trace 和浏览器状态都不得包含明文 API key。
 
@@ -101,6 +106,17 @@ PPIO 的模型名称来自用户配置或后续模型列表能力，本 feature 
 
 `messages` 首版只要求支持 `system`、`user`、`assistant` 三类文本消息。图片、音频、视频和工具调用由 `User Input Attachments` 或后续 tool calling feature 单独扩展。
 
+如果 provider 支持内置联网搜索或 tool calling，`ModelProviderRequest` 应能表达：
+
+- `tools`
+- `toolChoice`
+- `webSearchEnabled`
+- `thinkingEnabled`
+- `thinkingBudget`
+- `sourcePolicy`
+
+`webSearchEnabled` 默认开启，但具体执行可以由 Agent Runtime 的统一 search contract 完成，而不要求每个模型供应商都提供同名 API。Provider 不支持原生搜索时，Orchestrator 应使用独立 Search Provider 先生成 `Search Result Summary`，再调用模型。
+
 ### Response Contract
 
 `ModelProviderResponse` 应返回标准化结果：
@@ -113,8 +129,20 @@ PPIO 的模型名称来自用户配置或后续模型列表能力，本 feature 
 - `usage`
 - `rawResponseId`
 - `providerMeta`
+- `searchResults`
+- `thinkingMeta`
 
 `providerMeta` 只能包含可观测性需要的非敏感信息，例如 HTTP status、latency、供应商错误名和 sanitized request id。不得包含 API key、完整 prompt、完整用户附件或未脱敏原始响应。
+
+`searchResults` 只能保存结构化摘要和来源引用，不保存整页抓取内容。`thinkingMeta` 只能保存是否启用、预算、供应商返回的非敏感统计，不保存原始 chain-of-thought。
+
+### Web Search and Thinking Defaults
+
+- RONR 默认要求 `Web Search Before Speech`：Agent 在表达观点前必须先获得搜索摘要或明确的搜索失败记录。
+- RONR 默认启用 `Thinking Mode`：Provider request 应尽可能开启供应商支持的 reasoning / thinking 配置。
+- 供应商不支持 thinking 参数时，adapter 应记录 capability fallback，但不能阻塞会话。
+- 供应商返回原始推理链时，adapter 必须丢弃或脱敏，不能进入 `ModelProviderResponse.contentText`、event log、trace 或 UI。
+- 联网搜索失败时，应返回标准化 search error，由 Orchestrator 决定重试、暂停、降级或继续。
 
 ### Error Normalization
 
@@ -133,6 +161,7 @@ Provider adapter 必须把 HTTP 错误、网络错误和供应商错误名映射
 | `timeout` | 请求超过 `timeoutMs` | 是 | 稍后重试或提高超时 |
 | `network_failed` | DNS、TLS、连接失败 | 是 | 检查网络或供应商状态 |
 | `schema_parse_failed` | 内容无法解析为目标 JSON 或 schema 不匹配 | 否 | 重试当前 Agent 任务或调整 prompt / schema |
+| `search_failed` | 搜索 provider 失败、无可用搜索结果或搜索超时 | 视原因决定 | 重试搜索、暂停或降级为无外部依据讨论 |
 | `unknown_provider_error` | 未识别错误 | 视 HTTP status 决定 | 查看 sanitized diagnostics |
 
 自动重试只允许用于 `rate_limited`、`provider_unavailable`、`timeout` 和 `network_failed`，且首版最多重试一次。`auth_failed`、`invalid_request`、`model_not_found` 和 `schema_parse_failed` 不应盲目重试。
@@ -141,7 +170,7 @@ Provider adapter 必须把 HTTP 错误、网络错误和供应商错误名映射
 
 - `apps/web` 只能通过 RONR API 触发模型调用，不直接调用 PPIO。
 - `packages/agents` 负责 role task、prompt rendering、Provider 调用和 Agent 输出 schema 校验。
-- `packages/providers` 负责 provider profile、adapter、鉴权 header、transport、响应抽取和错误标准化。
+- `packages/providers` 负责 provider profile、adapter、鉴权 header、transport、搜索能力适配、thinking 参数适配、响应抽取和错误标准化。
 - `packages/core` 不依赖 provider SDK、provider profile、网络、API key 或供应商错误结构。
 - `packages/contracts` 定义跨模块共享的 request、response 和 error schema。
 
@@ -149,14 +178,15 @@ Provider adapter 必须把 HTTP 错误、网络错误和供应商错误名映射
 
 - 日志只能记录 `providerProfileId`、`model`、latency、HTTP status、internal error 和 sanitized provider error。
 - `Authorization` header、API key、原始 secret value 必须在日志、异常和 event log 中脱敏。
+- 原始 chain-of-thought、完整搜索页面内容和完整 provider raw response 不得进入日志、事件、trace 或浏览器状态。
 - 连接测试只返回可展示状态，例如 `ok`、`auth_failed`、`model_not_found`、latency 和 sanitized message。
 - 首版可用环境变量承载 secret；需要多用户 provider profile 时，再评估 secret store 和加密存储。
 
 ## Multilingual and Glossary Impact
 
-- 复用 `docs/glossary.md` 中已有术语：`Model Provider Connection`、`Model Provider`、`OpenAI-compatible Provider`、`Agent Role Runtime`。
-- 新增术语：`Provider Profile`、`Secret Reference`。
-- 新增或修改协议字段：`providerProfileId`、`apiKeySecretRef`、`structuredOutputMode`、`ModelProviderRequest`、`ModelProviderResponse`、`ModelProviderError`。
+- 复用 `docs/glossary.md` 中已有术语：`Model Provider Connection`、`Model Provider`、`OpenAI-compatible Provider`、`Agent Role Runtime`、`Source Reference`。
+- 新增术语：`Provider Profile`、`Secret Reference`、`Web Search Before Speech`、`Search Result Summary`、`Thinking Mode`、`Thinking Budget`。
+- 新增或修改协议字段：`providerProfileId`、`apiKeySecretRef`、`structuredOutputMode`、`webSearchEnabledDefault`、`thinkingEnabledDefault`、`thinkingBudgetDefault`、`webSearchEnabled`、`thinkingEnabled`、`thinkingBudget`、`sourcePolicy`、`ModelProviderRequest`、`ModelProviderResponse`、`ModelProviderError`。
 - UI 文案只能展示 provider 名称、模型名和连接状态，不展示 secret value。
 
 ## Development Mode
@@ -170,14 +200,17 @@ Provider 连接应先定义统一接口、mock provider、错误码和结构化�
 - 给定有效 Provider 配置时，Agent Runtime 能获得模型输出。
 - 给定 PPIO preset、有效 `apiKeySecretRef` 和模型名时，adapter 能构造符合 OpenAI-compatible chat completion 的请求。
 - 给定鉴权失败、权限不足、余额不足、限流、模型不存在、超时或不可解析输出时，系统返回标准化错误并保留当前会话状态。
+- 给定 provider 支持搜索时，adapter 能表达搜索工具调用或返回搜索来源摘要。
+- 给定 provider 支持 thinking 配置时，adapter 默认启用 thinking / reasoning。
+- 给定 provider 返回原始推理链时，系统不会保存或展示原始推理链。
 - Core domain 文档不出现供应商 SDK 依赖。
 - 浏览器、event log、prompt template 和 core state 中不出现明文 API key。
 
 ## Verification Plan
 
-- 自动化测试：覆盖 mock provider 成功输出、PPIO preset request 构造、Bearer header 注入、鉴权失败、权限不足、余额不足、限流、模型不存在、超时、schema_parse_failed 和 provider_unavailable。
-- fixture 验证：准备 PPIO chat completion success response、LLM error response 和 malformed JSON response fixture。
-- 人工检查：确认 API key 不进入 core、prompt template、event log、前端展示或错误消息。
+- 自动化测试：覆盖 mock provider 成功输出、PPIO preset request 构造、Bearer header 注入、搜索参数传递、thinking 参数传递、鉴权失败、权限不足、余额不足、限流、模型不存在、超时、schema_parse_failed、search_failed 和 provider_unavailable。
+- fixture 验证：准备 PPIO chat completion success response、search summary response、thinking meta response、LLM error response 和 malformed JSON response fixture。
+- 人工检查：确认 API key、原始 chain-of-thought、完整搜索页面内容不进入 core、prompt template、event log、前端展示或错误消息。
 - 不需要测试的理由：不适用，该 feature 涉及外部连接和错误恢复。
 
 ## Technical Notes
