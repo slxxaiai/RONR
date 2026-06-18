@@ -151,19 +151,14 @@ export function createOpenAICompatibleProvider(
       const startedAt = Date.now();
       let response: Response;
       try {
-        response = await fetchImpl(`${trimSlash(config.baseURL)}/chat/completions`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${config.apiKey}`
-          },
-          body: JSON.stringify({
-            model: request.model,
-            messages: request.messages,
-            max_tokens: request.maxTokens ?? config.maxTokensDefault,
-            temperature: request.temperature ?? config.temperatureDefault,
-            response_format: request.responseSchema
-              ? {
+        const body = {
+          model: request.model,
+          messages: request.messages,
+          max_tokens: request.maxTokens ?? config.maxTokensDefault,
+          temperature: request.temperature ?? config.temperatureDefault,
+          ...(request.responseSchema
+            ? {
+                response_format: {
                   type: "json_schema",
                   json_schema: {
                     name: "ronr_agent_output",
@@ -171,8 +166,17 @@ export function createOpenAICompatibleProvider(
                     schema: request.responseSchema
                   }
                 }
-              : { type: "json_object" }
-          }),
+              }
+            : {})
+        };
+
+        response = await fetchImpl(`${trimSlash(config.baseURL)}/chat/completions`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${config.apiKey}`
+          },
+          body: JSON.stringify(body),
           signal: AbortSignal.timeout(request.timeoutMs ?? config.timeoutMs)
         });
       } catch (error) {
