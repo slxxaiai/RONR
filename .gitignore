@@ -6,6 +6,7 @@ Thumbs.db
 *.log
 tmp/
 temp/
+.worktrees/
 
 # 可能包含密钥的环境文件
 .env
