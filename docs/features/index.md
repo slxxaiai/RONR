@@ -7,6 +7,7 @@
 | Feature | Status | Priority | Phase | Document |
 | --- | --- | --- | --- | --- |
 | Default Multilingual Support | 草稿 | 高 | P0 | [default-multilingual-support.md](default-multilingual-support.md) |
+| UI Aesthetic Style | 已规划 | 高 | P0 | [ui-aesthetic-style.md](ui-aesthetic-style.md) |
 | Web Session Entry | 草稿 | 高 | P0 | [web-session-entry.md](web-session-entry.md) |
 | User Input Attachments | 草稿 | 中 | P0 | [user-input-attachments.md](user-input-attachments.md) |
 | Agent Configuration | 草稿 | 高 | P0 | [agent-configuration.md](agent-configuration.md) |
@@ -27,23 +28,24 @@
 
 ## Dependency Order
 
-建议按以下顺序规划和实现。`Default Multilingual Support` 是项目级约束，也是 Web UI 的基础能力；所有后续 feature 都必须遵守。
+建议按以下顺序规划和实现。`Default Multilingual Support` 是项目级约束，也是 Web UI 的基础能力；所有后续 feature 都必须遵守。`UI Aesthetic Style` 是 Web UI 的视觉基线，应在 Web 界面扩展前固定。
 
 1. `Default Multilingual Support`
-2. `Deliberation State Model`
-3. `RONR Protocol Flow`
-4. `Agent Configuration`
-5. `API Contracts and Events`
-6. `Session Event Log`
-7. `Agent Role Runtime`
-8. `Prompt Template Configuration`
-9. `Model Provider Connection`
-10. `Action Plan Trace`
-11. `Web Session Entry`
-12. `Minimal Web Deliberation View`
-13. `User Interruption`
-14. `Session Template`
-15. `Quality Review`
+2. `UI Aesthetic Style`
+3. `Deliberation State Model`
+4. `RONR Protocol Flow`
+5. `Agent Configuration`
+6. `API Contracts and Events`
+7. `Session Event Log`
+8. `Agent Role Runtime`
+9. `Prompt Template Configuration`
+10. `Model Provider Connection`
+11. `Action Plan Trace`
+12. `Web Session Entry`
+13. `Minimal Web Deliberation View`
+14. `User Interruption`
+15. `Session Template`
+16. `Quality Review`
 
 `User Input Attachments` 可与 P0 主链并行设计，但不是最小 Web 运行闭环的阻塞依赖；如果要严格控制竖切范围，可以作为 P0 optional 或 P1 early 处理。
 
@@ -52,6 +54,7 @@
 ```mermaid
 flowchart TD
     DMS["Default Multilingual Support"]
+    UAS["UI Aesthetic Style"]
     DSM["Deliberation State Model"]
     RPF["RONR Protocol Flow"]
     AC["Agent Configuration"]
@@ -76,6 +79,9 @@ flowchart TD
     DMS -. applies to .-> APT
     DMS -. applies to .-> WSE
     DMS -. applies to .-> MWDV
+
+    UAS -. visual baseline .-> WSE
+    UAS -. visual baseline .-> MWDV
 
     DSM --> RPF
     DSM --> AC

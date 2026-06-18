@@ -57,6 +57,8 @@ RONR 面向多语言用户。如果新增 feature 时没有同步术语、本地
 - 默认 locale 为 `zh-CN`。
 - 用户切换语言后，系统应保存用户偏好，并在后续会话中复用。
 - 所有用户可见静态 UI 文案必须通过 translation key 管理，不允许散落硬编码。
+- Web UI 的固定结构标签必须通过 translation key 管理，包括页面标题、`html lang`、语言切换器、配置面板、错误提示、结果区 section 标题、阶段、角色、mandate、Vote.position、Motion.status、Objection type / severity / resolution status、Action Plan Trace 字段名。
+- AI 生成的正文内容不在前端猜译；创建会话时必须传入当前 `locale`，Role Agent Runtime 必须把该 locale 作为输出语言约束传给 Chair、Member 和 Secretary Agent。
 - 缺少目标语言翻译时，必须 fallback 到默认语言，并保留后续补齐翻译的可追踪项。
 - 修改已有术语时，必须检查 PRD、Roadmap、Architecture、Feature 文档和 Glossary 是否一致。
 
@@ -64,6 +66,7 @@ RONR 面向多语言用户。如果新增 feature 时没有同步术语、本地
 
 - 引入新的 `Canonical Term`：`Default Multilingual Support`、`Multilingual and Glossary Impact`、`Language Switcher`、`Locale`、`Translation Key`、`Fallback Language`。
 - 复用已有术语：`Canonical Term`、`docs/glossary.md`、`Role`、`Mandate`、`Vote`、`Action Plan`。
+- Web 结果视图复用已有术语：`Motion Status`、`Objection Type`、`Objection Severity`、`Resolution Status`、`Action Plan Trace`、`Source Reference`、`Validation Step`、`Rationale`、`Reservation`。
 - 新增 feature 模板字段：`Multilingual and Glossary Impact`。
 - 本 feature 要求同步更新 `docs/glossary.md`。
 
@@ -81,11 +84,13 @@ RONR 面向多语言用户。如果新增 feature 时没有同步术语、本地
 - `AGENTS.md` 明确要求后续任何相关改动都检查并维护 glossary。
 - Web UI 提供 `Language Switcher`，至少支持 `zh-CN`、`zh-TW`、`en`、`ja`、`ko`。
 - 切换 locale 后，导航、按钮、状态、错误提示和核心流程文案能更新为目标语言或按规则 fallback。
+- 切换 locale 后，结果视图中所有固定结构标签和枚举值必须更新为目标语言；AI 生成的标题、摘要、理由等正文内容由 session `locale` 约束生成，不由前端临时翻译。
+- 切换 locale 后，浏览器 `document.title` 和 `html lang` 必须同步更新。
 - 用户语言偏好能在后续会话中复用。
 
 ## Verification Plan
 
-- 自动化测试：后续实现时需要覆盖 locale 选择、fallback 和 translation key 缺失场景。
+- 自动化测试：覆盖 locale 选择、偏好复用、fallback、translation key 缺失、结构化错误本地化、结果区枚举/字段标签本地化、Role Agent Runtime 传递输出语言约束。
 - fixture 验证：需要为首批 locale 准备最小翻译资源 fixture。
 - 人工检查：检查模板、索引、AGENTS、glossary 和 Web UI 语言切换是否形成闭环。
 - 当前文档变更验证：检查 `Non-Goals` 不再排除语言切换 UI，并确认 glossary 收录新增 canonical terms。

@@ -185,13 +185,29 @@ export async function runDeliberation(
 
 function parseAgentJson<T extends z.ZodTypeAny>(text: string, schema: T): z.infer<T> {
   try {
-    return schema.parse(JSON.parse(text));
+    return schema.parse(JSON.parse(extractJsonObjectText(text)));
   } catch {
     throw new ProviderRuntimeError(
       "schema_parse_failed",
       "Agent 输出无法解析为约定 JSON schema。"
     );
   }
+}
+
+function extractJsonObjectText(text: string): string {
+  const trimmed = text.trim();
+  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  if (fenced?.[1]) {
+    return fenced[1].trim();
+  }
+
+  const start = trimmed.indexOf("{");
+  const end = trimmed.lastIndexOf("}");
+  if (start >= 0 && end > start) {
+    return trimmed.slice(start, end + 1);
+  }
+
+  return trimmed;
 }
 
 async function callAgent(
@@ -244,6 +260,7 @@ function buildAgents(agentConfig: AgentConfig): DeliberationSessionSnapshot["age
 function buildChairPrompt(userQuestion: string, locale: Locale): string {
   return [
     `Locale: ${locale}`,
+    `Output language: use ${locale} for every user-visible JSON string value.`,
     `User question: ${userQuestion}`,
     "请作为 Chair Agent 输出 JSON：",
     "{\"goal\":\"...\",\"constraints\":[\"...\"],\"mainMotion\":{\"title\":\"...\",\"description\":\"...\"},\"nextTask\":\"...\"}"
@@ -258,6 +275,7 @@ function buildMemberPrompt(
 ): string {
   return [
     `Locale: ${locale}`,
+    `Output language: use ${locale} for every user-visible JSON string value.`,
     `Mandate: ${mandate}`,
     `User question: ${userQuestion}`,
     `Motion: ${motionDescription}`,
@@ -274,6 +292,7 @@ function buildSecretaryPrompt(
 ): string {
   return [
     `Locale: ${locale}`,
+    `Output language: use ${locale} for every user-visible JSON string value.`,
     `User question: ${userQuestion}`,
     `Goal: ${goal}`,
     `Speeches: ${speeches.join(" | ")}`,

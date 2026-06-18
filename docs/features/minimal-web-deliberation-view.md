@@ -49,6 +49,14 @@
 - Vote.position 必须显示为支持、反对、弃权、有条件支持。
 - Reservation 必须独立展示为保留意见。
 - Action Item 必须能展示来源引用摘要。
+- 结果视图中的固定结构标签必须支持多语言，包括当前阶段、主议题、发言、反对意见、表决、保留意见、行动清单追溯、理由、条件、验证步骤和来源引用。
+- 结果视图中的枚举值必须支持多语言，包括阶段、角色、mandate、Vote.position、Motion.status、Objection type、Objection severity 和 Resolution status。
+
+## Multilingual and Glossary Impact
+
+- 复用已有术语：`Stage`、`Role`、`Mandate`、`Vote Position`、`Motion Status`、`Objection Type`、`Objection Severity`、`Resolution Status`、`Action Plan Trace`、`Rationale`、`Validation Step`、`Source Reference`、`Reservation`。
+- 新增 `Canonical Term`：`Condition`，用于结果视图中 Vote、Objection resolution 和 Action Item 的条件字段。
+- Web UI 结果区新增或修改文案时，必须同步维护 translation key，并检查 `docs/glossary.md`。
 
 ## Development Mode
 

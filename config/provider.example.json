@@ -4,7 +4,7 @@
   "protocol": "openai-compatible",
   "baseURL": "https://api.ppio.com/openai/v1",
   "apiKey": "replace-with-your-local-api-key",
-  "timeoutMs": 30000,
+  "timeoutMs": 300000,
   "temperatureDefault": 0.2,
-  "maxTokensDefault": 1200
+  "maxTokensDefault": 128000
 }

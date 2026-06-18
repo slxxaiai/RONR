@@ -159,15 +159,11 @@ export function createOpenAICompatibleProvider(
           ...(request.responseSchema
             ? {
                 response_format: {
-                  type: "json_schema",
-                  json_schema: {
-                    name: "ronr_agent_output",
-                    strict: true,
-                    schema: request.responseSchema
-                  }
+                  type: "json_object"
                 }
               }
-            : {})
+            : {}),
+          ...getModelRequestBodyOverrides(request.model)
         };
 
         response = await fetchImpl(`${trimSlash(config.baseURL)}/chat/completions`, {
@@ -235,6 +231,18 @@ function mapFetchError(error: unknown): ProviderRuntimeError {
 
 function trimSlash(value: string): string {
   return value.replace(/\/+$/, "");
+}
+
+function getModelRequestBodyOverrides(model: string): Record<string, unknown> {
+  if (model.trim().toLowerCase() !== "zai-org/glm-5.2") {
+    return {};
+  }
+
+  return {
+    thinking: {
+      type: "disabled"
+    }
+  };
 }
 
 function mapProviderModel(raw: Record<string, unknown>): ProviderModel {

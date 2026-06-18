@@ -34,6 +34,9 @@
 | Locale | 语言区域 | 語言地區 | ロケール | 로케일 | Runtime language and region identifier, such as `zh-CN` or `en`. |
 | Translation Key | 翻译键 | 翻譯鍵 | 翻訳キー | 번역 키 | Stable key used to look up localized UI text. |
 | Fallback Language | 回退语言 | 備援語言 | フォールバック言語 | 대체 언어 | Language used when a target locale is missing a translation. |
+| UI Aesthetic Style | UI 美学风格 | UI 美學風格 | UI 美学スタイル | UI 미학 스타일 | Visual style baseline for RONR Web UI, including token, spacing, radius, color, and interaction rules. |
+| Design Token | 设计令牌 | 設計權杖 | デザイントークン | 디자인 토큰 | Named visual value used by UI styles, such as color, radius, border, or focus ring. |
+| Focus Ring | 焦点环 | 焦點環 | フォーカスリング | 포커스 링 | Visible outline or shadow that indicates keyboard focus. |
 | Web Session Entry | Web 会话入口 | Web 會話入口 | Web セッション入口 | Web 세션 진입점 | Web entry point for creating a Deliberation Session. |
 | Minimal Web Deliberation View | 最小 Web 议事视图 | 最小 Web 議事視圖 | 最小 Web 熟議ビュー | 최소 Web 숙의 뷰 | Minimal web view for stages, agent output, votes, and action plan. |
 
@@ -103,6 +106,7 @@
 | Rationale | 理由 | 理由 | 根拠 | 근거 | Reason for a recommendation or action item. |
 | Risk | 风险 | 風險 | リスク | 위험 | Potential downside or failure condition. |
 | Assumption | 假设 | 假設 | 前提 | 가정 | Condition treated as true unless validated. |
+| Condition | 条件 | 條件 | 条件 | 조건 | Requirement or qualifier that must hold for a Vote, Objection resolution, or Action Item. |
 | Validation Step | 验证步骤 | 驗證步驟 | 検証ステップ | 검증 단계 | Step to test an assumption or reduce risk. |
 | Trade-off | 取舍 | 取捨 | トレードオフ | 트레이드오프 | Benefit-cost tension between options. |
 | Source Speech | 来源发言 | 來源發言 | 出典発言 | 출처 발언 | Speech used as evidence for an output item. |
