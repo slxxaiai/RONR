@@ -6,7 +6,7 @@
 
 ## Status
 
-进行中
+完成
 
 ## Priority
 
@@ -64,6 +64,7 @@ Provider 配置应表达为 `Provider Profile`，而不是把供应商细节散�
 - `protocol`：首版固定为 `openai-compatible`。
 - `baseURL`：例如 `https://api.ppio.com/openai/v1`。
 - `chatCompletionPath`：默认 `/chat/completions`。
+- `webSearchPath`：默认 `/v3/web-search`，用于 PPIO 搜索摘要。
 - `auth.type`：首版固定为 `bearer`。
 - `apiKeySecretRef`：服务端密钥引用，例如 `env:RONR_PROVIDER_PPIO_API_KEY`。
 - `defaultModel`：默认模型名，由配置提供，不硬编码到 adapter。
@@ -86,7 +87,9 @@ PPIO 作为首个真实 provider preset，使用 OpenAI-compatible chat completi
 - `Content-Type`：`application/json`
 - `Authorization`：`Bearer <API key>`
 - 请求体至少包含 `model`、`messages` 和 `max_tokens`
-- 如 Agent 输出需要结构化结果，优先使用 `response_format.type = json_schema`
+- 如 Agent 输出需要结构化结果，按 profile 的 `structuredOutputMode` 使用 `json_schema` 或 `json_object`
+- thinking 使用 PPIO 兼容字段 `separate_reasoning`、`enable_thinking` 和可选 `thinking_budget`
+- 联网搜索使用 PPIO `POST /v3/web-search` 生成 `Search Result Summary`，再作为上下文输入 Agent 模型调用
 
 PPIO 的模型名称来自用户配置或后续模型列表能力，本 feature 不维护模型清单。
 
@@ -104,7 +107,7 @@ PPIO 的模型名称来自用户配置或后续模型列表能力，本 feature 
 - `timeoutMs`
 - `metadata`
 
-`messages` 首版只要求支持 `system`、`user`、`assistant` 三类文本消息。图片、音频、视频和工具调用由 `User Input Attachments` 或后续 tool calling feature 单独扩展。
+`messages` 首版只要求支持 `system`、`user`、`assistant` 三类文本消息。`User Input Attachments` 产生的文件和链接上下文应先归一化为文本摘要和 `Source Reference`；图片、音频、视频等多模态输入不属于该 feature 的 Web 首版范围，应由后续独立 feature 评估。工具调用由后续 tool calling feature 单独扩展。
 
 如果 provider 支持内置联网搜索或 tool calling，`ModelProviderRequest` 应能表达：
 
@@ -215,7 +218,14 @@ Provider 连接应先定义统一接口、mock provider、错误码和结构化�
 
 ## Technical Notes
 
-本 feature 只定义连接能力和边界；本轮不实现代码，也不存储真实 API key。
+本 feature 已实现最小可运行连接能力和边界，不存储真实 API key。真实密钥仍只允许写入本地忽略文件 `config/provider.local.json`。
+
+当前实现包括：
+
+- `packages/providers`：本地 profile 解析、PPIO/OpenAI-compatible model list、chat completion、PPIO web search、Bearer 鉴权、错误标准化、search/thinking 安全元数据和 raw chain-of-thought 脱敏。
+- `packages/agents`：每个 Agent 发言前执行 search-before-speech，搜索成功时把 `Search Result Summary` 输入模型，搜索失败时记录 `search_failed` 并按 optional 策略降级；每次模型调用传入 role-specific JSON schema 和 thinking/search 意图。
+- `packages/contracts`：对外 `ProviderCallMeta` 只暴露 latency、HTTP status、search 状态/数量、thinking 开关/预算/统计和 capability fallback，不暴露 API key、完整 prompt、完整搜索页面或原始推理链。
+- `apps/web`：统一把 provider/runtime 错误转换成 `{ code, message, recoveryHint? }`。
 
 首版实现时不引入 PPIO SDK 或 OpenAI SDK。`OpenAICompatibleProvider` 可以基于 Web runtime / Node runtime 的 `fetch` 实现，减少依赖面。`response_format` 的具体 schema 由 `packages/agents` 或 `packages/contracts` 提供，adapter 只负责转换为供应商请求格式。
 
@@ -230,9 +240,9 @@ Provider adapter 的输出校验分两层：
 
 P0 分三步引入：
 
-1. `MockModelProvider`：先固定 `ModelProviderRequest`、`ModelProviderResponse` 和 `ModelProviderError` contract。
-2. `OpenAICompatibleProvider`：实现非流式 chat completion adapter，使用 PPIO preset 做首个真实连接。
-3. `Connection Test`：在服务端验证 provider profile、secret ref、模型名和错误映射。
+1. `MockModelProvider`：已用 unit/integration mock 固定 `ModelProviderRequest`、`ModelProviderResponse` 和 `ModelProviderError` contract。
+2. `OpenAICompatibleProvider`：已实现非流式 chat completion adapter，使用 PPIO preset 做首个真实连接。
+3. `Connection Test`：已提供 `/api/providers/ppio/connection-test`，只返回 `ok`、provider profile、latency 和 model count 等可展示状态；`/api/providers/ppio/models` 负责完整模型列表。
 
 Claude 专属适配、本地模型适配、模型列表同步、流式输出和多用户 secret store 后续再拆 feature。
 

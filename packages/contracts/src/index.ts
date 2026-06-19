@@ -55,10 +55,40 @@ export const agentConfigSchema = z.object({
 });
 export type AgentConfig = z.infer<typeof agentConfigSchema>;
 
+export const userInputAttachmentSchema = z.object({
+  id: z.string().min(1),
+  type: z.enum(["file", "link"]),
+  title: z.string().trim().min(1),
+  summary: z.string().trim().min(1),
+  confirmedByUser: z.literal(true),
+  url: z.string().url().optional(),
+  fileName: z.string().trim().min(1).optional(),
+  mimeType: z.string().trim().optional(),
+  sizeBytes: z.number().int().nonnegative().optional(),
+  readAt: z.string().datetime()
+}).superRefine((attachment, context) => {
+  if (attachment.type === "link" && !attachment.url) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["url"],
+      message: "link attachment requires url"
+    });
+  }
+  if (attachment.type === "file" && !attachment.fileName) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["fileName"],
+      message: "file attachment requires fileName"
+    });
+  }
+});
+export type UserInputAttachment = z.infer<typeof userInputAttachmentSchema>;
+
 export const createSessionRequestSchema = z.object({
   userQuestion: z.string().trim().min(1),
   locale: localeSchema,
   agentConfig: agentConfigSchema,
+  attachments: z.array(userInputAttachmentSchema).max(8).optional(),
   maxDeliberationRounds: z.number().int().positive().optional()
 });
 export type CreateSessionRequest = z.infer<typeof createSessionRequestSchema>;
@@ -69,7 +99,8 @@ export type ValidationResult =
 
 export function validateAgentConfig(
   agentConfig: unknown,
-  availableModelIds: string[]
+  availableModelIds: string[],
+  maxDeliberationRounds?: unknown
 ): ValidationResult {
   const errors: string[] = [];
   const available = new Set(availableModelIds);
@@ -100,6 +131,12 @@ export function validateAgentConfig(
       errors.push(`members[${index}].mandate 不受支持`);
     }
   });
+  if (
+    maxDeliberationRounds !== undefined
+    && (!Number.isInteger(maxDeliberationRounds) || Number(maxDeliberationRounds) <= 0)
+  ) {
+    errors.push("maxDeliberationRounds 必须是正整数");
+  }
 
   const uniqueErrors = [...new Set(errors)];
   return uniqueErrors.length > 0
@@ -124,6 +161,27 @@ export interface ProviderCallMeta {
   latencyMs: number;
   httpStatus?: number;
   finishReason?: string;
+  searchResultCount?: number;
+  searchStatus?: "completed" | "failed" | "unavailable";
+  searchErrorCode?: string;
+  thinkingEnabled?: boolean;
+  thinkingBudget?: number | string | Record<string, unknown>;
+  reasoningTokens?: number;
+  rawChainOfThoughtDropped?: boolean;
+  capabilityFallback?: string;
+}
+
+export interface SourceReference {
+  id: string;
+  type: "text_input" | "file_input" | "link_input";
+  title: string;
+  summary: string;
+  url?: string;
+  fileName?: string;
+  mimeType?: string;
+  sizeBytes?: number;
+  readAt: string;
+  confirmedByUser: boolean;
 }
 
 export interface Speech {
@@ -179,6 +237,7 @@ export interface ActionItem {
 export interface DeliberationSessionSnapshot {
   id: string;
   userQuestion: string;
+  sourceReferences: SourceReference[];
   goal: string;
   constraints: string[];
   locale: Locale;
@@ -208,13 +267,91 @@ export interface DeliberationSessionSnapshot {
   updatedAt: string;
 }
 
+export interface SessionEntry {
+  phase: "call_to_order";
+  activeAgentId: "chair";
+  currentSpeakerAgentId: "chair";
+  nextTask: string;
+}
+
 export interface CreateSessionResponse {
+  sessionId: string;
+  status: "completed";
+  phase: "action_resolution";
+  initialPhase: "call_to_order";
+  activeAgentId: "chair";
+  currentSpeakerAgentId: "chair";
+  nextTask: string;
+  sessionEntry: SessionEntry;
+  sessionSnapshot: DeliberationSessionSnapshot;
+  providerMeta: ProviderCallMeta[];
+}
+
+export interface DeliberationStreamStartedEvent {
+  type: "session_started";
+  sessionId: string;
+  phase: "call_to_order";
+  activeAgentId: string;
+  currentSpeakerAgentId: string;
+  nextTask: string;
+}
+
+export interface DeliberationStreamThinkingEvent {
+  type: "thinking";
+  id: string;
+  agentId: string;
+  role: "chair" | "secretary" | "member";
+  mandate?: Mandate;
+  phase: string;
+  summary: string;
+}
+
+export interface SearchSourceCitation {
+  title: string;
+  url: string;
+  snippet?: string;
+}
+
+export interface DeliberationStreamSearchSourcesEvent {
+  type: "search_sources";
+  id: string;
+  agentId: string;
+  role: "chair" | "secretary" | "member";
+  mandate?: Mandate;
+  phase: string;
+  status?: "completed" | "failed" | "unavailable";
+  errorCode?: string;
+  sources: SearchSourceCitation[];
+}
+
+export interface DeliberationStreamSpeechEvent {
+  type: "speech";
+  speech: Speech;
+}
+
+export interface DeliberationStreamCompletedEvent {
+  type: "completed";
   sessionId: string;
   status: "completed";
   phase: "action_resolution";
   sessionSnapshot: DeliberationSessionSnapshot;
   providerMeta: ProviderCallMeta[];
 }
+
+export interface DeliberationStreamErrorEvent {
+  type: "error";
+  code: string;
+  message: string;
+  recoveryHint?: string;
+}
+
+export type DeliberationStreamEvent =
+  | DeliberationStreamStartedEvent
+  | DeliberationStreamSearchSourcesEvent
+  | DeliberationStreamThinkingEvent
+  | DeliberationStreamSpeechEvent
+  | DeliberationStreamCompletedEvent
+  | DeliberationStreamErrorEvent;
 
 export interface RonrErrorResponse {
   code: string;

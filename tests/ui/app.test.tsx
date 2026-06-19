@@ -2,7 +2,7 @@
 import React from "react";
 import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import HomePage from "../../apps/web/app/page";
 import type { DeliberationSessionSnapshot } from "@ronr/contracts";
 
@@ -38,10 +38,288 @@ describe("RONR web app", () => {
 
     expect(screen.getByLabelText("语言区域")).toBeInTheDocument();
     expect(screen.getByText("Provider 配置")).toBeInTheDocument();
-    expect(screen.getByText("角色配置")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "角色配置区" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "启动议事" })).toBeInTheDocument();
     await waitFor(() => expect(screen.getByText("1 个模型已加载")).toBeInTheDocument());
     expect(screen.getAllByText("Model A").length).toBeGreaterThan(0);
+  });
+
+  test("shows a clear validation message when the personal decision question is empty", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(
+          JSON.stringify({
+            models: [
+              {
+                id: "model-a",
+                title: "Model A",
+                description: "A",
+                contextSize: 32000,
+                inputTokenPricePerM: 1,
+                outputTokenPricePerM: 2
+              }
+            ]
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        )
+      )
+    );
+
+    render(<HomePage />);
+
+    await waitFor(() => expect(screen.getByText("1 个模型已加载")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "启动议事" }));
+
+    expect(screen.getByRole("alert")).toHaveTextContent("请先输入一个个人决策问题。");
+    expect(screen.getByLabelText("个人决策问题")).toHaveAttribute("aria-invalid", "true");
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  test("lets users add, remove, and configure Member agents before starting a session", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = input.toString();
+      if (url === "/api/providers/ppio/models") {
+        return new Response(
+          JSON.stringify({
+            models: [
+              {
+                id: "model-a",
+                title: "Model A",
+                description: "A",
+                contextSize: 32000,
+                inputTokenPricePerM: 1,
+                outputTokenPricePerM: 2
+              },
+              {
+                id: "model-b",
+                title: "Model B",
+                description: "B",
+                contextSize: 128000,
+                inputTokenPricePerM: 1,
+                outputTokenPricePerM: 2
+              }
+            ]
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }
+
+      return new Response(
+        JSON.stringify({
+          sessionId: sessionSnapshot.id,
+          status: "completed",
+          phase: "action_resolution",
+          initialPhase: "call_to_order",
+          activeAgentId: "chair",
+          currentSpeakerAgentId: "chair",
+          nextTask: "Member discussion starts.",
+          sessionEntry: {
+            phase: "call_to_order",
+            activeAgentId: "chair",
+            currentSpeakerAgentId: "chair",
+            nextTask: "Member discussion starts."
+          },
+          sessionSnapshot,
+          providerMeta: []
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<HomePage />);
+
+    await waitFor(() => expect(screen.getByText("2 个模型已加载")).toBeInTheDocument());
+    expect(screen.queryByLabelText("删除 1")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "添加议员" }));
+    expect(screen.getByRole("combobox", { name: "议员 3 模型" })).toBeInTheDocument();
+    fireEvent.change(screen.getByRole("combobox", { name: "议员 3 模型" }), { target: { value: "model-b" } });
+    const mandateSelects = screen.getAllByRole("combobox", { name: "职责授权" });
+    fireEvent.change(mandateSelects[2], { target: { value: "domain-expert" } });
+
+    fireEvent.click(screen.getByRole("button", { name: "删除 2" }));
+    expect(screen.queryByRole("combobox", { name: "议员 3 模型" })).not.toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "议员 2 模型" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "添加议员" }));
+    fireEvent.change(screen.getByRole("combobox", { name: "议员 3 模型" }), { target: { value: "model-b" } });
+    fireEvent.change(screen.getAllByRole("combobox", { name: "职责授权" })[2], { target: { value: "action-planner" } });
+    fireEvent.change(screen.getByLabelText("最大讨论轮次"), { target: { value: "3" } });
+    fireEvent.change(screen.getByLabelText("个人决策问题"), {
+      target: { value: "我应该现在买房吗？" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "启动议事" }));
+
+    await waitFor(() => expect(screen.getByText("The personal version has a clearer first user.")).toBeInTheDocument());
+    const sessionCall = fetchMock.mock.calls.find(([input]) => input.toString() === "/api/sessions/stream");
+    expect(sessionCall).toBeDefined();
+    const requestBody = JSON.parse(String(sessionCall?.[1]?.body));
+    expect(requestBody.maxDeliberationRounds).toBe(3);
+    expect(requestBody.agentConfig.members).toEqual([
+      { id: "member-user", model: "model-a", mandate: "user-advocate" },
+      { id: "member-1", model: "model-b", mandate: "domain-expert" },
+      { id: "member-2", model: "model-b", mandate: "action-planner" }
+    ]);
+  });
+
+  test("lets users add file and link attachment summaries before starting a session", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = input.toString();
+      if (url === "/api/providers/ppio/models") {
+        return new Response(
+          JSON.stringify({
+            models: [
+              {
+                id: "model-a",
+                title: "Model A",
+                description: "A",
+                contextSize: 32000,
+                inputTokenPricePerM: 1,
+                outputTokenPricePerM: 2
+              }
+            ]
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }
+
+      return new Response(
+        JSON.stringify({
+          sessionId: sessionSnapshot.id,
+          status: "completed",
+          phase: "action_resolution",
+          initialPhase: "call_to_order",
+          activeAgentId: "chair",
+          currentSpeakerAgentId: "chair",
+          nextTask: "Member discussion starts.",
+          sessionEntry: {
+            phase: "call_to_order",
+            activeAgentId: "chair",
+            currentSpeakerAgentId: "chair",
+            nextTask: "Member discussion starts."
+          },
+          sessionSnapshot: {
+            ...sessionSnapshot,
+            sourceReferences: [
+              ...sessionSnapshot.sourceReferences,
+              {
+                id: "att-file-1",
+                type: "file_input",
+                title: "budget.txt",
+                summary: "Edited budget summary",
+                fileName: "budget.txt",
+                readAt: "2026-06-18T00:00:00.000Z",
+                confirmedByUser: true
+              },
+              {
+                id: "att-link-1",
+                type: "link_input",
+                title: "Policy note",
+                summary: "Policy summary",
+                url: "https://example.com/policy",
+                readAt: "2026-06-18T00:00:00.000Z",
+                confirmedByUser: true
+              }
+            ]
+          },
+          providerMeta: []
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<HomePage />);
+
+    await waitFor(() => expect(screen.getByText("1 个模型已加载")).toBeInTheDocument());
+    expect(screen.getByText("补充背景")).toBeInTheDocument();
+    expect(screen.queryByText("语音")).not.toBeInTheDocument();
+    expect(screen.queryByText("麦克风")).not.toBeInTheDocument();
+    expect(screen.queryByText("音频")).not.toBeInTheDocument();
+
+    const fileInput = screen.getByLabelText("文件输入") as HTMLInputElement;
+    const file = new File(["首付预算 200 万，月供不能超过收入 35%。"], "budget.txt", { type: "text/plain" });
+    fireEvent.change(fileInput, { target: { files: [file] } });
+    await waitFor(() => expect(screen.getAllByText("budget.txt").length).toBeGreaterThan(0));
+
+    fireEvent.change(screen.getByLabelText("链接 URL"), { target: { value: "https://example.com/policy" } });
+    fireEvent.change(screen.getByLabelText("链接标题"), { target: { value: "Policy note" } });
+    fireEvent.change(screen.getByLabelText("链接摘要"), { target: { value: "Policy summary" } });
+    fireEvent.click(screen.getByRole("button", { name: "添加链接摘要" }));
+    expect(screen.getByText("Policy note")).toBeInTheDocument();
+
+    const summaries = screen.getAllByLabelText("输入摘要");
+    fireEvent.change(summaries[0], { target: { value: "Edited budget summary" } });
+    fireEvent.change(screen.getByLabelText("个人决策问题"), {
+      target: { value: "我应该现在买房吗？" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "启动议事" }));
+
+    await waitFor(() => expect(screen.getByText("The personal version has a clearer first user.")).toBeInTheDocument());
+    const sessionCall = fetchMock.mock.calls.find(([input]) => input.toString() === "/api/sessions/stream");
+    const requestBody = JSON.parse(String(sessionCall?.[1]?.body));
+    expect(requestBody.attachments).toEqual([
+      expect.objectContaining({
+        type: "file",
+        title: "budget.txt",
+        summary: "Edited budget summary",
+        fileName: "budget.txt",
+        confirmedByUser: true
+      }),
+      expect.objectContaining({
+        type: "link",
+        title: "Policy note",
+        summary: "Policy summary",
+        url: "https://example.com/policy",
+        confirmedByUser: true
+      })
+    ]);
+    expect(screen.queryByRole("region", { name: "来源引用" })).not.toBeInTheDocument();
+  });
+
+  test("blocks session start when an attachment summary is cleared", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = input.toString();
+      if (url === "/api/providers/ppio/models") {
+        return new Response(
+          JSON.stringify({
+            models: [
+              {
+                id: "model-a",
+                title: "Model A",
+                description: "A",
+                contextSize: 32000,
+                inputTokenPricePerM: 1,
+                outputTokenPricePerM: 2
+              }
+            ]
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }
+
+      return new Response(JSON.stringify({}), { status: 500, headers: { "Content-Type": "application/json" } });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<HomePage />);
+
+    await waitFor(() => expect(screen.getByText("1 个模型已加载")).toBeInTheDocument());
+    const fileInput = screen.getByLabelText("文件输入") as HTMLInputElement;
+    const file = new File(["首付预算 200 万。"], "budget.txt", { type: "text/plain" });
+    fireEvent.change(fileInput, { target: { files: [file] } });
+    await waitFor(() => expect(screen.getAllByText("budget.txt").length).toBeGreaterThan(0));
+
+    fireEvent.change(screen.getByLabelText("个人决策问题"), {
+      target: { value: "我应该现在买房吗？" }
+    });
+    fireEvent.change(screen.getByLabelText("输入摘要"), { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: "启动议事" }));
+
+    expect(screen.getByRole("alert")).toHaveTextContent("请确认每条补充背景都有摘要。");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   test("uses the shadcn-inspired neutral UI shell and status styling hooks", async () => {
@@ -71,14 +349,333 @@ describe("RONR web app", () => {
     expect(container.querySelector(".app-shell")).toBeInTheDocument();
     expect(container.querySelector(".topbar")).toBeInTheDocument();
     expect(container.querySelector(".brand-block")).toBeInTheDocument();
+    expect(container.querySelector(".topic-panel")).toBeInTheDocument();
+    expect(container.querySelector(".meeting-panel")).toBeInTheDocument();
+    expect(container.querySelector(".meeting-status-bar")).toBeInTheDocument();
+    expect(container.querySelector(".role-panel")).toBeInTheDocument();
+    expect(container.querySelector(".meeting-chat")).toBeInTheDocument();
+    expect(container.querySelector(".chat-thread")).toBeInTheDocument();
+    expect(container.querySelector(".panel-collapse-action")).toBeInTheDocument();
+    expect(container.querySelector(".panel-section-inline")).toBeInTheDocument();
+    expect(container.querySelector(".member-fields")).toBeInTheDocument();
     await waitFor(() => expect(container.querySelector(".status-pill.status-ok")).toHaveTextContent("1 个模型已加载"));
+
+    fireEvent.click(screen.getByRole("button", { name: "隐藏话题区" }));
+    expect(container.querySelector(".topic-panel")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "显示话题区" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "显示话题区" }));
+    expect(container.querySelector(".topic-panel")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "隐藏角色配置区" }));
+    expect(container.querySelector(".role-panel")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "显示角色配置区" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "显示角色配置区" }));
+    expect(container.querySelector(".role-panel")).toBeInTheDocument();
 
     const css = readFileSync("apps/web/app/styles.css", "utf8");
     expect(css).toContain("--background: #ffffff");
     expect(css).toContain("--primary: #09090b");
     expect(css).toContain("--ring: #a1a1aa");
+    expect(css).toContain(".meeting-chat");
+    expect(css).toContain(".meeting-status-bar");
+    expect(css).toContain(".chat-bubble");
+    expect(css).toContain(".panel-collapse-action");
+    expect(css).toContain(".member-fields");
+    expect(css).not.toContain(".meeting-table");
+    expect(css).not.toContain(".agent-ring");
     expect(css).not.toContain("#1c7c54");
     expect(css).not.toContain("#135f40");
+  });
+
+  test("shows muted meeting progress status in the Meeting Area header", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = input.toString();
+        if (url === "/api/providers/ppio/models") {
+          return new Response(
+            JSON.stringify({
+              models: [
+                {
+                  id: "model-a",
+                  title: "Model A",
+                  description: "A",
+                  contextSize: 32000,
+                  inputTokenPricePerM: 1,
+                  outputTokenPricePerM: 2
+                }
+              ]
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } }
+          );
+        }
+
+        return new Response(
+          JSON.stringify({
+            sessionId: sessionSnapshot.id,
+            status: "completed",
+            phase: "action_resolution",
+            initialPhase: "call_to_order",
+            activeAgentId: "chair",
+            currentSpeakerAgentId: "member-user",
+            nextTask: "Ask Members to test the first product wedge.",
+            sessionEntry: {
+              phase: "call_to_order",
+              activeAgentId: "chair",
+              currentSpeakerAgentId: "member-user",
+              nextTask: "Ask Members to test the first product wedge."
+            },
+            sessionSnapshot,
+            providerMeta: []
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      })
+    );
+
+    const { container } = render(<HomePage />);
+
+    const statusBar = container.querySelector(".meeting-status-bar");
+    expect(statusBar).toBeInTheDocument();
+    expect(statusBar).toHaveTextContent("当前阶段");
+    expect(statusBar).toHaveTextContent("议题确认");
+    expect(statusBar).toHaveTextContent("正在发言");
+    expect(statusBar).toHaveTextContent("chair");
+    expect(statusBar).toHaveTextContent("等待启动");
+
+    await waitFor(() => expect(screen.getByText("1 个模型已加载")).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText("个人决策问题"), {
+      target: { value: "我应该现在买房吗？" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "启动议事" }));
+
+    await waitFor(() => expect(screen.getByText("The personal version has a clearer first user.")).toBeInTheDocument());
+    expect(statusBar).toHaveTextContent("行动清单");
+    expect(statusBar).toHaveTextContent("member-user");
+    expect(statusBar).toHaveTextContent("已完成");
+
+    const css = readFileSync("apps/web/app/styles.css", "utf8");
+    expect(css).toContain(".meeting-status-label");
+    expect(css).toMatch(/\.meeting-status-bar\s*\{[^}]*font-size: 11px/s);
+    expect(css).toContain("var(--muted-foreground)");
+  });
+
+  test("streams thinking and speeches into the central Meeting Output before completion", async () => {
+    let enqueueEvent: ((event: unknown) => void) | null = null;
+    let closeStream: (() => void) | null = null;
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        const encoder = new TextEncoder();
+        enqueueEvent = (event: unknown) => controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`));
+        closeStream = () => controller.close();
+      }
+    });
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = input.toString();
+      if (url === "/api/providers/ppio/models") {
+        return new Response(
+          JSON.stringify({
+            models: [
+              {
+                id: "model-a",
+                title: "Model A",
+                description: "A",
+                contextSize: 32000,
+                inputTokenPricePerM: 1,
+                outputTokenPricePerM: 2
+              }
+            ]
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }
+
+      return new Response(stream, {
+        status: 200,
+        headers: { "Content-Type": "application/x-ndjson" }
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { container } = render(<HomePage />);
+    const emitStreamEvent = async (event: unknown) => {
+      await act(async () => {
+        enqueueEvent?.(event);
+        await Promise.resolve();
+      });
+    };
+
+    await waitFor(() => expect(screen.getByText("1 个模型已加载")).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText("个人决策问题"), {
+      target: { value: "我应该现在买房吗？" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "启动议事" }));
+
+    await emitStreamEvent({
+      type: "session_started",
+      sessionId: "session-stream",
+      phase: "call_to_order",
+      activeAgentId: "chair",
+      currentSpeakerAgentId: "chair",
+      nextTask: "Chair is confirming the topic."
+    });
+    await waitFor(() => expect(container.querySelector(".meeting-status-bar")).toHaveTextContent("议题确认"));
+    expect(container.querySelector(".meeting-status-bar")).toHaveTextContent("chair");
+    expect(container.querySelector(".meeting-status-bar")).toHaveTextContent("进行中");
+
+    await emitStreamEvent({
+      type: "search_sources",
+      id: "sources-chair",
+      agentId: "chair",
+      role: "chair",
+      phase: "call_to_order",
+      sources: [
+        {
+          title: "上海购房政策摘要",
+          url: "https://example.com/shanghai-policy",
+          snippet: "限购和贷款政策需要在决策前复核。"
+        }
+      ]
+    });
+    await emitStreamEvent({
+      type: "thinking",
+      id: "thinking-chair",
+      agentId: "chair",
+      role: "chair",
+      phase: "call_to_order",
+      summary: "正在检索信息并整理议题确认。"
+    });
+    await waitFor(() => expect(screen.getByText("搜索来源")).toBeInTheDocument());
+    expect(container.querySelector(".chat-thinking")).not.toBeInTheDocument();
+    expect(container.querySelector(".chat-sources")).not.toBeInTheDocument();
+    const chairMessage = container.querySelector("[data-turn-id='chair-call_to_order']");
+    expect(chairMessage).toBeInTheDocument();
+    expect(chairMessage?.querySelectorAll(".turn-disclosure")).toHaveLength(2);
+    expect(chairMessage).toHaveTextContent("思考过程");
+    const disclosures = chairMessage?.querySelectorAll("details.turn-disclosure");
+    expect(disclosures?.[0]).not.toHaveAttribute("open");
+    expect(disclosures?.[1]).not.toHaveAttribute("open");
+    expect(chairMessage).toHaveTextContent("上海购房政策摘要");
+    expect(chairMessage?.querySelector("a")).toHaveAttribute("href", "https://example.com/shanghai-policy");
+
+    await emitStreamEvent({
+      type: "speech",
+      speech: {
+        id: "speech-chair",
+        agentId: "chair",
+        role: "chair",
+        phase: "call_to_order",
+        content: "我会先确认这个个人决策问题的范围。",
+        claims: [],
+        assumptions: []
+      }
+    });
+    await waitFor(() => expect(chairMessage).toHaveTextContent("我"));
+    expect(chairMessage).not.toHaveTextContent("我会先确认这个个人决策问题的范围。");
+    await waitFor(() => expect(chairMessage).toHaveTextContent("我会先确认这个个人决策问题的范围。"));
+    expect(container.querySelectorAll("[data-turn-id='chair-call_to_order']")).toHaveLength(1);
+
+    await emitStreamEvent({
+      type: "search_sources",
+      id: "sources-chair-followup",
+      agentId: "chair",
+      role: "chair",
+      phase: "call_to_order",
+      sources: [
+        {
+          title: "追加约束摘要",
+          url: "https://example.com/followup",
+          snippet: "第二轮同阶段搜索不能覆盖第一轮消息。"
+        }
+      ]
+    });
+    await emitStreamEvent({
+      type: "thinking",
+      id: "thinking-chair-followup",
+      agentId: "chair",
+      role: "chair",
+      phase: "call_to_order",
+      summary: "正在处理同一阶段的第二个完整回合。"
+    });
+    await emitStreamEvent({
+      type: "speech",
+      speech: {
+        id: "speech-chair-followup",
+        agentId: "chair",
+        role: "chair",
+        phase: "call_to_order",
+        content: "我会把追加约束作为第二个回合处理。",
+        claims: [],
+        assumptions: []
+      }
+    });
+    const chairFollowupMessage = container.querySelector("[data-turn-id='chair-call_to_order-2']");
+    await waitFor(() => expect(chairFollowupMessage).toHaveTextContent("我会把追加约束作为第二个回合处理。"));
+    expect(container.querySelectorAll(".chat-turn")).toHaveLength(2);
+    expect(chairMessage).toHaveTextContent("我会先确认这个个人决策问题的范围。");
+    expect(chairFollowupMessage).toHaveTextContent("追加约束摘要");
+    expect(chairFollowupMessage?.querySelectorAll("details.turn-disclosure")).toHaveLength(2);
+
+    await emitStreamEvent({
+      type: "search_sources",
+      id: "sources-chair-failed",
+      agentId: "chair",
+      role: "chair",
+      phase: "call_to_order",
+      status: "failed",
+      errorCode: "search_failed",
+      sources: []
+    });
+    await emitStreamEvent({
+      type: "thinking",
+      id: "thinking-chair-failed",
+      agentId: "chair",
+      role: "chair",
+      phase: "call_to_order",
+      summary: "正在说明搜索来源不可用。"
+    });
+    const chairFailedSearchMessage = container.querySelector("[data-turn-id='chair-call_to_order-3']");
+    await waitFor(() => expect(chairFailedSearchMessage).toHaveTextContent("搜索未返回可用来源"));
+    expect(chairFailedSearchMessage?.querySelector("details.turn-sources")).not.toHaveAttribute("open");
+    expect(chairFailedSearchMessage).toHaveTextContent("search_failed");
+
+    await emitStreamEvent({
+      type: "speech",
+      speech: {
+        id: "speech-member-user-stream",
+        agentId: "member-user",
+        role: "member",
+        mandate: "user-advocate",
+        phase: "opening_statements",
+        content: "我会代表用户收益先发言。",
+        claims: [],
+        assumptions: []
+      }
+    });
+    await waitFor(() => expect(screen.getByText("我会代表用户收益先发言。")).toBeInTheDocument());
+    expect(container.querySelectorAll("[data-turn-id='member-user-opening_statements']")).toHaveLength(1);
+    expect(container.querySelector(".meeting-status-bar")).toHaveTextContent("开场陈述");
+    expect(container.querySelector(".meeting-status-bar")).toHaveTextContent("member-user");
+    expect(container.querySelector(".meeting-status-bar")).toHaveTextContent("进行中");
+
+    await emitStreamEvent({
+      type: "completed",
+      sessionId: sessionSnapshot.id,
+      status: "completed",
+      phase: "action_resolution",
+      sessionSnapshot,
+      providerMeta: []
+    });
+    closeStream?.();
+    await waitFor(() => expect(screen.getByText("The personal version has a clearer first user.")).toBeInTheDocument());
+    expect(container.querySelector(".meeting-status-bar")).toHaveTextContent("行动清单");
+    expect(container.querySelector(".meeting-status-bar")).toHaveTextContent("已完成");
+    expect(fetchMock).toHaveBeenCalledWith("/api/sessions/stream", expect.any(Object));
+
+    const css = readFileSync("apps/web/app/styles.css", "utf8");
+    expect(css).toContain(".turn-disclosure");
+    expect(css).toContain(".streaming-caret");
+    expect(css).toContain("var(--muted-foreground)");
   });
 
   test("updates controls and result enum labels when the locale changes", async () => {
@@ -109,6 +706,16 @@ describe("RONR web app", () => {
             sessionId: sessionSnapshot.id,
             status: "completed",
             phase: "action_resolution",
+            initialPhase: "call_to_order",
+            activeAgentId: "chair",
+            currentSpeakerAgentId: "chair",
+            nextTask: "Ask Members to test the first product wedge.",
+            sessionEntry: {
+              phase: "call_to_order",
+              activeAgentId: "chair",
+              currentSpeakerAgentId: "chair",
+              nextTask: "Ask Members to test the first product wedge."
+            },
             sessionSnapshot,
             providerMeta: []
           }),
@@ -127,34 +734,37 @@ describe("RONR web app", () => {
     expect(document.documentElement.lang).toBe("en");
     expect(document.title).toBe("RONR AI Deliberation");
     expect(screen.getByText("Provider Configuration")).toBeInTheDocument();
-    expect(screen.getByText("Role Configuration")).toBeInTheDocument();
-    expect(screen.getAllByText("User Advocate")).toHaveLength(2);
-    expect(screen.getAllByText("Red Team Member")).toHaveLength(2);
+    expect(screen.getByRole("heading", { name: "Role Configuration Panel" })).toBeInTheDocument();
+    expect(screen.getAllByText("User Advocate").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText("Red Team Member").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText("Topic Panel")).toBeInTheDocument();
+    expect(screen.getByText("Meeting Area")).toBeInTheDocument();
+    expect(screen.getByText("Role Configuration Panel")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Choose file" })).toBeInTheDocument();
+    expect(screen.getByText("No file selected")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Hide Topic Panel" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Hide Role Configuration" })).toBeInTheDocument();
     expect(screen.queryByText("user-advocate")).not.toBeInTheDocument();
     expect(screen.queryByText("red-team")).not.toBeInTheDocument();
+
+    const i18nSource = readFileSync("apps/web/src/i18n.ts", "utf8");
+    expect(i18nSource).not.toContain("layout.meetingTable");
 
     fireEvent.change(screen.getByLabelText("Personal decision question"), {
       target: { value: "Should I build the personal version first?" }
     });
     fireEvent.click(screen.getByRole("button", { name: "Start Deliberation" }));
 
-    await waitFor(() => expect(screen.getByText("Deliberation result")).toBeInTheDocument());
-    expect(screen.getByText("Action Resolution")).toBeInTheDocument();
-    expect(screen.getAllByText("Opening Statements")).toHaveLength(2);
-    expect(screen.getByText("Qualified Support")).toBeInTheDocument();
-    expect(screen.getAllByText("Main Motion").length).toBeGreaterThan(0);
-    expect(screen.getByText("Adopted")).toBeInTheDocument();
-    expect(screen.getByText("Speeches")).toBeInTheDocument();
-    expect(screen.getByText("Votes")).toBeInTheDocument();
-    expect(screen.getByText("Objections")).toBeInTheDocument();
-    expect(screen.getByText("Cost")).toBeInTheDocument();
-    expect(screen.getByText("Medium")).toBeInTheDocument();
-    expect(screen.getByText("Converted to Condition")).toBeInTheDocument();
-    expect(screen.getByText("Reservations")).toBeInTheDocument();
-    expect(screen.getByText("Rationale")).toBeInTheDocument();
-    expect(screen.getAllByText("Conditions").length).toBeGreaterThan(0);
-    expect(screen.getByText("First Validation")).toBeInTheDocument();
-    expect(screen.getAllByText("Source References").length).toBeGreaterThan(0);
+    await waitFor(() => expect(screen.getByText("The personal version has a clearer first user.")).toBeInTheDocument());
+    expect(screen.getByText("Deliberation Session created")).toBeInTheDocument();
+    expect(screen.getAllByText("chair").length).toBeGreaterThan(0);
+    expect(screen.getByText("ME")).toBeInTheDocument();
+    expect(screen.getByText("Next deliberation task")).toBeInTheDocument();
+    expect(screen.getByText("Ask Members to test the first product wedge.")).toBeInTheDocument();
+    expect(screen.queryByText("Deliberation result")).not.toBeInTheDocument();
+    expect(screen.queryByText("Votes")).not.toBeInTheDocument();
+    expect(screen.queryByText("Objections")).not.toBeInTheDocument();
+    expect(screen.queryByText("Reservations")).not.toBeInTheDocument();
     expect(screen.queryByText("action_resolution")).not.toBeInTheDocument();
     expect(screen.queryByText("opening_statements")).not.toBeInTheDocument();
     expect(screen.queryByText("qualified_support")).not.toBeInTheDocument();
@@ -166,19 +776,11 @@ describe("RONR web app", () => {
     expect(screen.getByLabelText("로케일")).toHaveValue("ko");
     expect(document.documentElement.lang).toBe("ko");
     expect(document.title).toBe("RONR AI 숙의");
-    expect(screen.getByText("숙의 결과")).toBeInTheDocument();
-    expect(screen.getAllByText("주 동의안").length).toBeGreaterThan(0);
-    expect(screen.getByText("채택됨")).toBeInTheDocument();
-    expect(screen.getAllByText("개회 발언").length).toBeGreaterThan(0);
-    expect(screen.getByText("조건부 지지")).toBeInTheDocument();
-    expect(screen.getByText("비용")).toBeInTheDocument();
-    expect(screen.getByText("보통")).toBeInTheDocument();
-    expect(screen.getByText("조건으로 전환됨")).toBeInTheDocument();
-    expect(screen.getByText("실행 계획 추적")).toBeInTheDocument();
-    expect(screen.getByText("근거")).toBeInTheDocument();
-    expect(screen.getAllByText("조건").length).toBeGreaterThan(0);
-    expect(screen.getByText("첫 검증")).toBeInTheDocument();
-    expect(screen.getAllByText("출처 참조").length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "파일 선택" })).toBeInTheDocument();
+    expect(screen.getByText("선택된 파일 없음")).toBeInTheDocument();
+    expect(screen.getByText("의원")).toBeInTheDocument();
+    expect(screen.getAllByText("사용자 대변인").length).toBeGreaterThan(0);
+    expect(screen.queryByText("숙의 결과")).not.toBeInTheDocument();
     expect(screen.queryByText("Cost")).not.toBeInTheDocument();
     expect(screen.queryByText("Converted to Condition")).not.toBeInTheDocument();
   });
@@ -291,6 +893,16 @@ describe("RONR web app", () => {
 const sessionSnapshot: DeliberationSessionSnapshot = {
   id: "session-1",
   userQuestion: "Should I build the personal version first?",
+  sourceReferences: [
+    {
+      id: "source-text-input",
+      type: "text_input",
+      title: "User question",
+      summary: "Should I build the personal version first?",
+      readAt: "2026-06-18T00:00:00.000Z",
+      confirmedByUser: true
+    }
+  ],
   goal: "Decide the first product wedge",
   constraints: [],
   locale: "en",

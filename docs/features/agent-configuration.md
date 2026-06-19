@@ -6,7 +6,7 @@
 
 ## Status
 
-进行中
+完成
 
 ## Priority
 
@@ -61,6 +61,19 @@ RONR 的核心是多 AI Agent 议事。最小 Web 闭环需要明确哪些 Agent
 
 Agent 配置是 Web、Role Runtime 和 core session 的共享契约，应先固定配置 schema、role 枚举、mandate 枚举和校验错误，再实现表单或运行时逻辑。
 
+## Multilingual and Glossary Impact
+
+- 复用已有术语：`Agent Configuration`、`Chair`、`Secretary`、`Member`、`Mandate`、`Model`、`Max Deliberation Rounds`、`Convergence Check`。
+- Web UI 新增添加 / 删除 Member、Member 模型、最大讨论轮次和校验提示文案，均通过 translation key 管理，并支持 `zh-CN`、`zh-TW`、`en`、`ja`、`ko`。
+
+## Implementation Notes
+
+- Web UI 支持用户为 Chair、Secretary 和每个 Member 选择模型。
+- Web UI 支持动态添加和删除 Member；删除按钮只在 Member 数量大于 2 时出现，保证最小议事配置。
+- 新增 Member 默认使用最近 Member 的模型，并默认使用 `general` mandate；用户可以改为 `user-advocate`、`domain-expert`、`red-team` 或 `action-planner`。
+- Web UI 支持可选 `Max Deliberation Rounds`。留空时不发送该字段，代表交给后续 `Convergence Check`；填写时必须为正整数。
+- `POST /api/sessions` 会校验 Chair、Secretary、至少两个 Member、所有模型 ID、Member mandate 和可选 `maxDeliberationRounds`。
+
 ## Acceptance Criteria
 
 - 给定 Chair、Secretary 和两个 Member 时，配置通过校验。
@@ -71,9 +84,9 @@ Agent 配置是 Web、Role Runtime 和 core session 的共享契约，应先固�
 
 ## Verification Plan
 
-- 自动化测试：覆盖有效配置、重复 Chair、缺少 Secretary、Member 数量不足、未知 mandate、有效最大讨论轮次、未设置最大讨论轮次。
+- 自动化测试：覆盖有效配置、缺少 Chair、缺少 Secretary、Member 数量不足、未知 mandate、未知模型、有效最大讨论轮次、无最大讨论轮次、非法最大讨论轮次，以及 Web UI 添加 / 删除 / 配置 Member 后提交正确 payload。
 - fixture 验证：提供默认个人决策配置和多组无效配置。
-- 人工检查：确认角色文案和 glossary canonical term 一致。
+- 人工检查：确认角色文案和 glossary canonical term 一致；确认真实 provider 端到端可使用动态角色配置运行完整议事。
 - 不需要测试的理由：不适用，该 feature 是启动议事会话的前置条件。
 
 ## Technical Notes

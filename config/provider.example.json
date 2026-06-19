@@ -3,8 +3,19 @@
   "displayName": "PPIO",
   "protocol": "openai-compatible",
   "baseURL": "https://api.ppio.com/openai/v1",
+  "chatCompletionPath": "/chat/completions",
+  "webSearchPath": "/v3/web-search",
   "apiKey": "replace-with-your-local-api-key",
+  "apiKeySecretRef": "local:config/provider.local.json#apiKey",
+  "auth": {
+    "type": "bearer"
+  },
+  "defaultModel": "replace-with-provider-model-id",
   "timeoutMs": 300000,
   "temperatureDefault": 0.2,
-  "maxTokensDefault": 128000
+  "maxTokensDefault": 128000,
+  "structuredOutputMode": "json_object",
+  "webSearchEnabledDefault": true,
+  "thinkingEnabledDefault": true,
+  "thinkingBudgetDefault": "medium"
 }

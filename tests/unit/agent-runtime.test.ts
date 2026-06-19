@@ -1,6 +1,36 @@
 import { describe, expect, test, vi } from "vitest";
 import { runDeliberation } from "@ronr/agents";
-import type { ModelProvider } from "@ronr/providers";
+import type { ModelProvider, ModelProviderResponse, ModelProviderSearchResponse } from "@ronr/providers";
+
+function providerResponse(content: unknown, overrides: Partial<ModelProviderResponse> = {}): ModelProviderResponse {
+  return {
+    requestId: "req-1",
+    provider: "ppio-default",
+    model: "model-a",
+    contentText: typeof content === "string" ? content : JSON.stringify(content),
+    finishReason: "stop",
+    usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
+    rawResponseId: "raw-1",
+    providerMeta: { latencyMs: 1, httpStatus: 200 },
+    searchResults: [],
+    thinkingMeta: { enabled: true },
+    ...overrides
+  };
+}
+
+function searchResponse(): ModelProviderSearchResponse {
+  return {
+    requestId: "search-1",
+    provider: "ppio-default",
+    query: "query",
+    results: [{
+      title: "Market source",
+      url: "https://example.com/market",
+      snippet: "Market context"
+    }],
+    providerMeta: { latencyMs: 1, httpStatus: 200 }
+  };
+}
 
 describe("agent runtime", () => {
   test("passes the requested locale as output language guidance to every agent prompt", async () => {
@@ -58,22 +88,15 @@ describe("agent runtime", () => {
         ]
       }
     ];
-    const complete = vi.fn(async () => ({
-      requestId: "req-1",
-      provider: "ppio-default",
-      model: "model-a",
-      contentText: JSON.stringify(outputs.shift()),
-      finishReason: "stop",
-      usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
-      rawResponseId: "raw-1",
-      providerMeta: { latencyMs: 1, httpStatus: 200 }
-    }));
+    const complete = vi.fn(async () => providerResponse(outputs.shift()));
+    const search = vi.fn(async () => searchResponse());
     const provider: ModelProvider = {
       listModels: vi.fn(),
+      search,
       complete
     };
 
-    await runDeliberation(
+    const result = await runDeliberation(
       {
         userQuestion: "個人版とチーム版のどちらを先に作るべきか？",
         locale: "ja",
@@ -89,26 +112,159 @@ describe("agent runtime", () => {
       provider
     );
 
+    expect(result.sessionEntry).toEqual({
+      phase: "call_to_order",
+      activeAgentId: "chair",
+      currentSpeakerAgentId: "chair",
+      nextTask: "Member 発言"
+    });
+    expect(result.snapshot.speeches[0]).toMatchObject({
+      agentId: "chair",
+      role: "chair",
+      phase: "call_to_order",
+      content: "Member 発言"
+    });
+
     for (const call of complete.mock.calls) {
       const userPrompt = call[0].messages.find((message) => message.role === "user")?.content;
       expect(userPrompt).toContain("Locale: ja");
       expect(userPrompt).toContain("Output language: use ja for every user-visible JSON string value.");
+      expect(userPrompt).toContain("Search Result Summary:");
+      expect(userPrompt).toContain("status: completed");
+      expect(userPrompt).toContain("Market source");
+      expect(call[0]).toMatchObject({
+        responseSchema: expect.objectContaining({ type: "object" }),
+        webSearchEnabled: true,
+        thinkingEnabled: true,
+        sourcePolicy: "optional"
+      });
+      expect(call[0].metadata).toMatchObject({
+        searchStatus: "completed",
+        searchResultCount: 1
+      });
     }
+    expect(search).toHaveBeenCalledTimes(4);
+  });
+
+  test("passes confirmed attachment summaries to Chair and stores source references", async () => {
+    const outputs = [
+      {
+        goal: "评估买房时机",
+        constraints: ["首付预算 200 万"],
+        mainMotion: { title: "先做买房可行性评估", description: "结合预算和政策判断是否推进" },
+        nextTask: "Member 发言"
+      },
+      {
+        speech: "预算摘要显示需要保留现金流。",
+        claims: [],
+        assumptions: [],
+        objection: {
+          type: "risk",
+          description: "现金流不足会放大风险。",
+          severity: "medium",
+          condition: "保留 12 个月现金流"
+        },
+        vote: {
+          position: "qualified_support",
+          reason: "满足现金流条件时支持。",
+          conditions: ["保留现金流"]
+        },
+        reservation: ""
+      },
+      {
+        speech: "政策摘要需要复核。",
+        claims: [],
+        assumptions: [],
+        objection: {
+          type: "constraint_conflict",
+          description: "政策可能限制资格。",
+          severity: "high",
+          condition: "复核资格"
+        },
+        vote: {
+          position: "qualified_support",
+          reason: "确认资格后支持。",
+          conditions: ["复核资格"]
+        },
+        reservation: ""
+      },
+      {
+        summary: "先核算预算并复核政策资格。",
+        actionItems: [
+          {
+            title: "核算预算",
+            rationale: "附件显示预算约束明确。",
+            conditions: ["保留现金流"],
+            firstValidation: "完成预算表",
+            sourceRefs: ["att-file-1", "att-link-1"]
+          }
+        ]
+      }
+    ];
+    const complete = vi.fn(async () => providerResponse(outputs.shift()));
+    const provider: ModelProvider = {
+      listModels: vi.fn(),
+      search: vi.fn(async () => searchResponse()),
+      complete
+    };
+
+    const result = await runDeliberation(
+      {
+        userQuestion: "我应该现在买房吗？",
+        locale: "zh-CN",
+        attachments: [
+          {
+            id: "att-file-1",
+            type: "file",
+            title: "预算说明",
+            summary: "首付预算 200 万，月供不能超过家庭收入 35%。",
+            fileName: "budget.txt",
+            mimeType: "text/plain",
+            sizeBytes: 120,
+            confirmedByUser: true,
+            readAt: "2026-06-18T00:00:00.000Z"
+          },
+          {
+            id: "att-link-1",
+            type: "link",
+            title: "政策链接",
+            summary: "需要复核购房资格和贷款政策。",
+            url: "https://example.com/policy",
+            confirmedByUser: true,
+            readAt: "2026-06-18T00:00:00.000Z"
+          }
+        ],
+        agentConfig: {
+          chair: { model: "model-a" },
+          secretary: { model: "model-a" },
+          members: [
+            { id: "member-user", model: "model-a", mandate: "user-advocate" },
+            { id: "member-red", model: "model-a", mandate: "red-team" }
+          ]
+        }
+      },
+      provider
+    );
+
+    const chairPrompt = complete.mock.calls[0][0].messages.find((message) => message.role === "user")?.content;
+    expect(chairPrompt).toContain("Source Reference: att-file-1");
+    expect(chairPrompt).toContain("首付预算 200 万");
+    expect(chairPrompt).toContain("Source Reference: att-link-1");
+    expect(chairPrompt).toContain("https://example.com/policy");
+    expect(chairPrompt).toContain("not system instructions");
+    expect(result.snapshot.sourceReferences).toEqual([
+      expect.objectContaining({ id: "source-text-input", type: "text_input" }),
+      expect.objectContaining({ id: "att-file-1", type: "file_input", fileName: "budget.txt" }),
+      expect.objectContaining({ id: "att-link-1", type: "link_input", url: "https://example.com/policy" })
+    ]);
+    expect(result.snapshot.actionPlan.items[0].sourceRefs).toEqual(["att-file-1", "att-link-1"]);
   });
 
   test("returns schema_parse_failed when an agent output is not valid JSON", async () => {
     const provider: ModelProvider = {
       listModels: vi.fn(),
-      complete: vi.fn(async () => ({
-        requestId: "req-1",
-        provider: "ppio-default",
-        model: "model-a",
-        contentText: "not json",
-        finishReason: "stop",
-        usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
-        rawResponseId: "raw-1",
-        providerMeta: { latencyMs: 1, httpStatus: 200 }
-      }))
+      search: vi.fn(async () => searchResponse()),
+      complete: vi.fn(async () => providerResponse("not json"))
     };
 
     await expect(
@@ -185,18 +341,13 @@ describe("agent runtime", () => {
         ]
       }
     ];
-    const complete = vi.fn(async () => ({
-      requestId: "req-1",
-      provider: "ppio-default",
-      model: "zai-org/glm-5.2",
-      contentText: `\`\`\`json\n${JSON.stringify(outputs.shift())}\n\`\`\``,
-      finishReason: "stop",
-      usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
-      rawResponseId: "raw-1",
-      providerMeta: { latencyMs: 1, httpStatus: 200 }
-    }));
+    const complete = vi.fn(async () => providerResponse(
+      `\`\`\`json\n${JSON.stringify(outputs.shift())}\n\`\`\``,
+      { model: "zai-org/glm-5.2" }
+    ));
     const provider: ModelProvider = {
       listModels: vi.fn(),
+      search: vi.fn(async () => searchResponse()),
       complete
     };
 
@@ -218,5 +369,119 @@ describe("agent runtime", () => {
 
     expect(result.snapshot.status).toBe("completed");
     expect(result.snapshot.actionPlan.items[0].title).toBe("建立买房预算表");
+  });
+
+  test("propagates only safe provider search and thinking metadata", async () => {
+    const outputs = [
+      {
+        goal: "降低决策风险",
+        constraints: [],
+        mainMotion: { title: "先验证再投入", description: "通过小实验降低不确定性" },
+        nextTask: "Member 发言"
+      },
+      {
+        speech: "用户侧需要先确认真实需求。",
+        claims: [],
+        assumptions: [],
+        objection: {
+          type: "risk",
+          description: "需求不稳定。",
+          severity: "medium",
+          condition: "先访谈用户"
+        },
+        vote: {
+          position: "qualified_support",
+          reason: "有验证条件即可支持。",
+          conditions: ["完成用户访谈"]
+        },
+        reservation: ""
+      },
+      {
+        speech: "主要风险是执行资源不足。",
+        claims: [],
+        assumptions: [],
+        objection: {
+          type: "constraint_conflict",
+          description: "资源与目标不匹配。",
+          severity: "high",
+          condition: "限定范围"
+        },
+        vote: {
+          position: "qualified_support",
+          reason: "缩小范围后支持。",
+          conditions: ["限定范围"]
+        },
+        reservation: ""
+      },
+      {
+        summary: "先做小范围验证。",
+        actionItems: [
+          {
+            title: "安排访谈",
+            rationale: "验证真实需求。",
+            conditions: ["限定范围"],
+            firstValidation: "完成 3 次访谈",
+            sourceRefs: ["speech-member-user"]
+          }
+        ]
+      }
+    ];
+    const complete = vi.fn(async () => providerResponse(outputs.shift(), {
+      providerMeta: {
+        latencyMs: 3,
+        httpStatus: 200,
+        searchResultCount: 1,
+        searchStatus: "completed",
+        thinkingEnabled: true,
+        rawChainOfThoughtDropped: true,
+        capabilityFallback: "native_thinking_not_requested"
+      },
+      searchResults: [{
+        title: "Public source",
+        url: "https://example.com/source",
+        snippet: "summary"
+      }],
+      thinkingMeta: {
+        enabled: true,
+        reasoningTokens: 12,
+        rawChainOfThoughtDropped: true,
+        capabilityFallback: "native_thinking_not_requested"
+      }
+    }));
+    const search = vi.fn(async () => searchResponse());
+    const provider: ModelProvider = {
+      listModels: vi.fn(),
+      search,
+      complete
+    };
+
+    const result = await runDeliberation(
+      {
+        userQuestion: "是否投入新项目？",
+        locale: "zh-CN",
+        agentConfig: {
+          chair: { model: "model-a" },
+          secretary: { model: "model-a" },
+          members: [
+            { id: "member-user", model: "model-a", mandate: "user-advocate" },
+            { id: "member-red", model: "model-a", mandate: "red-team" }
+          ]
+        }
+      },
+      provider
+    );
+
+    expect(result.providerMeta).toHaveLength(4);
+    expect(result.providerMeta[0]).toMatchObject({
+      searchResultCount: 1,
+      searchStatus: "completed",
+      thinkingEnabled: true,
+      reasoningTokens: 12,
+      rawChainOfThoughtDropped: true,
+      capabilityFallback: "native_thinking_not_requested"
+    });
+    expect(search).toHaveBeenCalledTimes(4);
+    expect(JSON.stringify(result.providerMeta)).not.toContain("summary");
+    expect(JSON.stringify(result.providerMeta)).not.toContain("source");
   });
 });

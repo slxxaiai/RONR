@@ -8,9 +8,9 @@
 | --- | --- | --- | --- | --- |
 | Default Multilingual Support | 完成 | 高 | P0 | [default-multilingual-support.md](default-multilingual-support.md) |
 | UI Aesthetic Style | 完成 | 高 | P0 | [ui-aesthetic-style.md](ui-aesthetic-style.md) |
-| Web Session Entry | 进行中 | 高 | P0 | [web-session-entry.md](web-session-entry.md) |
-| User Input Attachments | 草稿 | 中 | P0 | [user-input-attachments.md](user-input-attachments.md) |
-| Agent Configuration | 进行中 | 高 | P0 | [agent-configuration.md](agent-configuration.md) |
+| Web Session Entry | 完成 | 高 | P0 | [web-session-entry.md](web-session-entry.md) |
+| User Input Attachments | 完成 | 中 | P0 | [user-input-attachments.md](user-input-attachments.md) |
+| Agent Configuration | 完成 | 高 | P0 | [agent-configuration.md](agent-configuration.md) |
 | Deliberation Session Lifecycle | 草稿 | 中 | P0 | [deliberation-session-lifecycle.md](deliberation-session-lifecycle.md) |
 | RONR Protocol Flow | 进行中 | 高 | P0 | [ronr-protocol-flow.md](ronr-protocol-flow.md) |
 | Deliberation State Model | 进行中 | 高 | P0 | [deliberation-state-model.md](deliberation-state-model.md) |
@@ -18,7 +18,7 @@
 | Session Event Log | 草稿 | 高 | P0 | [session-event-log.md](session-event-log.md) |
 | Agent Role Runtime | 进行中 | 高 | P0 | [agent-role-runtime.md](agent-role-runtime.md) |
 | Prompt Template Configuration | 草稿 | 高 | P0 | [prompt-template-configuration.md](prompt-template-configuration.md) |
-| Model Provider Connection | 进行中 | 高 | P0 | [model-provider-connection.md](model-provider-connection.md) |
+| Model Provider Connection | 完成 | 高 | P0 | [model-provider-connection.md](model-provider-connection.md) |
 | Action Plan Trace | 进行中 | 高 | P0 | [action-plan-trace.md](action-plan-trace.md) |
 | Minimal Web Deliberation View | 完成 | 高 | P0 | [minimal-web-deliberation-view.md](minimal-web-deliberation-view.md) |
 | User Interruption | 草稿 | 中 | P1 | [user-interruption.md](user-interruption.md) |

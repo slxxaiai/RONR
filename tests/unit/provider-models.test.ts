@@ -57,10 +57,14 @@ describe("provider model list", () => {
 
   test("maps provider errors to stable internal codes", () => {
     expect(mapProviderError(401, "FAILED_TO_AUTH")).toBe("auth_failed");
+    expect(mapProviderError(403, "ACCESS_DENY")).toBe("permission_denied");
     expect(mapProviderError(404, "MODEL_NOT_FOUND")).toBe("model_not_found");
+    expect(mapProviderError(400, "INVALID_REQUEST_BODY")).toBe("invalid_request");
     expect(mapProviderError(429, "RATE_LIMIT_EXCEEDED")).toBe("rate_limited");
+    expect(mapProviderError(429, "TOKEN_LIMIT_EXCEEDED")).toBe("token_limit_exceeded");
     expect(mapProviderError(403, "NOT_ENOUGH_BALANCE")).toBe("insufficient_balance");
     expect(mapProviderError(503, "SERVICE_NOT_AVAILABLE")).toBe("provider_unavailable");
+    expect(mapProviderError(502, "SEARCH_FAILED")).toBe("search_failed");
   });
 
   test("maps model list network failures to network_failed without exposing apiKey", async () => {

@@ -34,11 +34,33 @@
 | Locale | 语言区域 | 語言地區 | ロケール | 로케일 | Runtime language and region identifier, such as `zh-CN` or `en`. |
 | Translation Key | 翻译键 | 翻譯鍵 | 翻訳キー | 번역 키 | Stable key used to look up localized UI text. |
 | Fallback Language | 回退语言 | 備援語言 | フォールバック言語 | 대체 언어 | Language used when a target locale is missing a translation. |
-| UI Aesthetic Style | UI 美学风格 | UI 美學風格 | UI 美学スタイル | UI 미학 스타일 | Visual style baseline for RONR Web UI, including token, spacing, radius, color, and interaction rules. |
+| UI Aesthetic Style | UI 美学风格 | UI 美學風格 | UI 美学スタイル | UI 미학 스타일 | Visual style baseline for RONR Web UI, including token, spacing, radius, color, interaction rules, and three-column workspace layout. |
 | Design Token | 设计令牌 | 設計權杖 | デザイントークン | 디자인 토큰 | Named visual value used by UI styles, such as color, radius, border, or focus ring. |
 | Focus Ring | 焦点环 | 焦點環 | フォーカスリング | 포커스 링 | Visible outline or shadow that indicates keyboard focus. |
 | Web Session Entry | Web 会话入口 | Web 會話入口 | Web セッション入口 | Web 세션 진입점 | Web entry point for creating a Deliberation Session. |
-| Minimal Web Deliberation View | 最小 Web 议事视图 | 最小 Web 議事視圖 | 最小 Web 熟議ビュー | 최소 Web 숙의 뷰 | Minimal web view for stages, agent output, votes, and action plan. |
+| User Input Attachments | 用户输入附件 | 使用者輸入附件 | ユーザー入力添付 | 사용자 입력 첨부 | Web input capability for adding text, files, or links to a Deliberation Session. |
+| Text Input | 文字输入 | 文字輸入 | テキスト入力 | 텍스트 입력 | User-provided text question or context in the Web entry. |
+| File Input | 文件输入 | 檔案輸入 | ファイル入力 | 파일 입력 | User-provided file that must be normalized into a source-tracked context summary. |
+| Link Input | 链接输入 | 連結輸入 | リンク入力 | 링크 입력 | User-provided URL that must be normalized into a source-tracked context summary. |
+| Attachment Summary | 附件摘要 | 附件摘要 | 添付要約 | 첨부 요약 | Reviewable summary generated from File Input or Link Input before deliberation uses it as context. |
+| Next Deliberation Task | 下一步议事任务 | 下一步議事任務 | 次の熟議タスク | 다음 숙의 작업 | Chair-provided next task shown immediately after creating a Deliberation Session. |
+| Minimal Web Deliberation View | 最小 Web 议事视图 | 最小 Web 議事視圖 | 最小 Web 熟議ビュー | 최소 Web 숙의 뷰 | Minimal three-column web view for Topic Panel, Meeting Area, Role Configuration Panel, chat-style agent output, votes, and action plan. |
+| Topic Panel | 话题区 | 話題區 | トピックパネル | 주제 패널 | Left side panel for the user question, attachments, and Chair-led topic confirmation. |
+| Meeting Area | 会议区 | 會議區 | 会議エリア | 회의 영역 | Central area where the AI Agent deliberation output is displayed. |
+| Role Configuration Panel | 角色配置区 | 角色設定區 | ロール設定パネル | 역할 구성 패널 | Right side panel for provider status, role models, Member mandates, and round limit. |
+| Side Panel | 侧边功能区 | 側邊功能區 | サイドパネル | 사이드 패널 | Collapsible left or right functional panel in the Web workspace. |
+| Chat Thread | 群聊议事流 | 群聊議事流 | チャット形式の熟議スレッド | 그룹 채팅 숙의 흐름 | Central message stream used to display AI Agent deliberation output. |
+| Chat Message | 群聊发言消息 | 群聊發言訊息 | チャット発言メッセージ | 그룹 채팅 발언 메시지 | One visible Agent message displayed with avatar, role metadata, optional Collapsed Detail, and generated speech content. |
+| Agent Turn Message | Agent 回合消息 | Agent 回合訊息 | Agent ターンメッセージ | Agent 턴 메시지 | One Chat Message that combines a single Agent turn's Search Source Citation, Thinking Summary, and Speech instead of splitting them into separate messages. |
+| Collapsed Detail | 折叠详情 | 摺疊詳情 | 折りたたみ詳細 | 접힌 상세 | Default-collapsed expandable area inside an Agent Turn Message for Search Source Citation or Thinking Summary. |
+| Meeting Output | 会议输出 | 會議輸出 | 会議出力 | 회의 출력 | Output container inside the Meeting Area. |
+| Meeting Status Bar | 会议进度状态栏 | 會議進度狀態列 | 会議進行ステータスバー | 회의 진행 상태 표시줄 | Muted status row in the Meeting Area header that shows current Stage, active Agent, Current Speaker, and session progress state. |
+| Streaming Meeting Output | 流式会议输出 | 流式會議輸出 | ストリーミング会議出力 | 스트리밍 회의 출력 | Meeting Output mode that appends safe events as they arrive, including Search Source Citation, Thinking Summary, Speech, and completion. |
+| Typewriter Streaming | 逐字流式输出 | 逐字流式輸出 | タイプライター式ストリーミング | 타자식 스트리밍 | UI rendering mode that reveals generated Speech progressively character by character instead of inserting the full content at once. |
+| Thinking Summary | 思考摘要 | 思考摘要 | 思考要約 | 사고 요약 | User-visible, low-contrast summary of what the Agent is doing; never raw chain-of-thought. |
+| Search Source Citation | 搜索来源引用 | 搜尋來源引用 | 検索出典引用 | 검색 출처 인용 | Visible citation card for a search source, including title, URL, and optional snippet. |
+| Search Status | 搜索状态 | 搜尋狀態 | 検索状態 | 검색 상태 | Status attached to a search_sources event, including completed, failed, or unavailable. |
+| Search Error Code | 搜索错误代码 | 搜尋錯誤代碼 | 検索エラーコード | 검색 오류 코드 | Provider or runtime error code shown inside Collapsed Detail when search returns no usable sources. |
 
 ## Agent and Role Terms
 
@@ -71,6 +93,7 @@
 | Amendment | 修正案 | 修正案 | 修正案 | 수정안 | Modification to a motion or candidate proposal. |
 | Speech | 发言 | 發言 | 発言 | 발언 | Structured contribution from an agent. |
 | Floor | 发言权 | 發言權 | 発言権 | 발언권 | Permission to speak in a stage. |
+| Current Speaker | 当前发言 Agent | 目前發言 Agent | 現在の発言 Agent | 현재 발언 Agent | Agent currently producing or most recently responsible for visible Meeting Output. |
 | Objection | 反对意见 | 反對意見 | 異議 | 이의 제기 | Risk, flaw, or alternative view raised against a motion. |
 | Clarifying Question | 澄清问题 | 釐清問題 | 確認質問 | 명확화 질문 | Question used to reduce ambiguity before debate or voting. |
 | Deliberation | 聚焦讨论 | 聚焦討論 | 熟議 | 숙의 | Focused discussion around motions and objections. |
