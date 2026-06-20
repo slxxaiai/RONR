@@ -144,6 +144,22 @@ describe("agent runtime", () => {
       });
     }
     expect(search).toHaveBeenCalledTimes(4);
+    const searchQueries = search.mock.calls.map((call) => call[0].query);
+    expect(new Set(searchQueries).size).toBe(4);
+    expect(searchQueries[0]).toContain("Search Intent: chair");
+    expect(searchQueries[1]).toContain("Search Intent: member/user-advocate");
+    expect(searchQueries[2]).toContain("Search Intent: member/red-team");
+    expect(searchQueries[3]).toContain("Search Intent: secretary");
+    expect(searchQueries[0]).toContain("topic framing");
+    expect(searchQueries[1]).toContain("user needs");
+    expect(searchQueries[2]).toContain("failure cases");
+    expect(searchQueries[3]).toContain("action plan validation");
+    for (const query of searchQueries) {
+      expect(query).toContain("個人版とチーム版のどちらを先に作るべきか？");
+      expect(query).not.toContain("Locale:");
+      expect(query).not.toContain("Output language:");
+      expect(query).not.toContain("请作为");
+    }
   });
 
   test("passes confirmed attachment summaries to Chair and stores source references", async () => {
@@ -258,6 +274,101 @@ describe("agent runtime", () => {
       expect.objectContaining({ id: "att-link-1", type: "link_input", url: "https://example.com/policy" })
     ]);
     expect(result.snapshot.actionPlan.items[0].sourceRefs).toEqual(["att-file-1", "att-link-1"]);
+  });
+
+  test("passes prior deliberation transcript to later speakers as known positions", async () => {
+    const outputs = [
+      {
+        goal: "选择更低风险的功能顺序",
+        constraints: ["时间有限"],
+        mainMotion: { title: "先做个人版", description: "先验证个人用户场景" },
+        nextTask: "请成员依次发言"
+      },
+      {
+        speech: "我支持先做个人版，因为能最快验证个人用户需求。",
+        claims: ["个人版验证更快"],
+        assumptions: ["已有个人用户线索"],
+        objection: {
+          type: "risk",
+          description: "团队版需求可能被延后。",
+          severity: "medium",
+          condition: "记录团队版后续验证窗口"
+        },
+        vote: {
+          position: "qualified_support",
+          reason: "限定个人场景时支持。",
+          conditions: ["两周后复盘团队版需求"]
+        },
+        reservation: "不能忽略团队协作场景"
+      },
+      {
+        speech: "我反对直接推进，因为第一个成员已经指出团队版风险，需要先设验证边界。",
+        claims: ["需要验证边界"],
+        assumptions: ["团队版风险真实存在"],
+        objection: {
+          type: "constraint_conflict",
+          description: "资源不足时不能同时覆盖两个版本。",
+          severity: "high",
+          condition: "明确个人版范围"
+        },
+        vote: {
+          position: "qualified_support",
+          reason: "有边界才支持。",
+          conditions: ["限定个人版范围"]
+        },
+        reservation: ""
+      },
+      {
+        summary: "先做个人版，但保留团队版验证窗口。",
+        actionItems: [
+          {
+            title: "定义个人版边界",
+            rationale: "第二个成员回应了第一个成员的团队版风险。",
+            conditions: ["两周后复盘团队版需求"],
+            firstValidation: "完成范围文档",
+            sourceRefs: ["speech-member-user", "speech-member-red"]
+          }
+        ]
+      }
+    ];
+    const complete = vi.fn(async () => providerResponse(outputs.shift()));
+    const provider: ModelProvider = {
+      listModels: vi.fn(),
+      search: vi.fn(async () => searchResponse()),
+      complete
+    };
+
+    await runDeliberation(
+      {
+        userQuestion: "个人版和团队版先做哪个？",
+        locale: "zh-CN",
+        agentConfig: {
+          chair: { model: "model-a" },
+          secretary: { model: "model-a" },
+          members: [
+            { id: "member-user", model: "model-a", mandate: "user-advocate" },
+            { id: "member-red", model: "model-a", mandate: "red-team" }
+          ]
+        }
+      },
+      provider
+    );
+
+    const firstMemberPrompt = complete.mock.calls[1][0].messages.find((message) => message.role === "user")?.content;
+    const secondMemberPrompt = complete.mock.calls[2][0].messages.find((message) => message.role === "user")?.content;
+    const secretaryPrompt = complete.mock.calls[3][0].messages.find((message) => message.role === "user")?.content;
+
+    expect(firstMemberPrompt).toContain("Deliberation Transcript:");
+    expect(firstMemberPrompt).toContain("speech-chair");
+    expect(firstMemberPrompt).toContain("请成员依次发言");
+    expect(secondMemberPrompt).toContain("Deliberation Transcript:");
+    expect(secondMemberPrompt).toContain("speech-chair");
+    expect(secondMemberPrompt).toContain("speech-member-user");
+    expect(secondMemberPrompt).toContain("我支持先做个人版");
+    expect(secondMemberPrompt).toContain("reservation: 不能忽略团队协作场景");
+    expect(secretaryPrompt).toContain("Deliberation Transcript:");
+    expect(secretaryPrompt).toContain("speech-member-red");
+    expect(secretaryPrompt).toContain("我反对直接推进");
   });
 
   test("returns schema_parse_failed when an agent output is not valid JSON", async () => {

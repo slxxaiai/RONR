@@ -335,4 +335,39 @@ describe("provider chat completion", () => {
       }
     ]);
   });
+
+  test("maps PPIO webPages.value search responses", async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({
+      code: 200,
+      data: {
+        _type: "SearchResponse",
+        webPages: {
+          value: [
+            {
+              name: "上海现在适合买房吗_齐家问问",
+              url: "https://www.jia.com/wenda/a-629027.html",
+              summary: "长期自住且现金流允许时，买房时机需要结合个人实际情况判断。"
+            }
+          ],
+          webSearchUrl: "https://bochaai.com/search?q=上海买房"
+        }
+      }
+    }));
+    const provider = createOpenAICompatibleProvider(providerConfig, fetchMock);
+
+    const response = await provider.search?.({
+      requestId: "search-1",
+      providerProfileId: "ppio-default",
+      query: "目前上海适合买房吗？"
+    });
+
+    expect(response?.results).toEqual([
+      {
+        title: "上海现在适合买房吗_齐家问问",
+        url: "https://www.jia.com/wenda/a-629027.html",
+        snippet: "长期自住且现金流允许时，买房时机需要结合个人实际情况判断。",
+        source: "web_search"
+      }
+    ]);
+  });
 });

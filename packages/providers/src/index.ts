@@ -609,13 +609,17 @@ function extractSearchResultList(value: unknown, source: string): SearchResultSu
 
 function extractPpioWebSearchResults(body: Record<string, unknown>): SearchResultSummary[] {
   const nestedData = body.data && typeof body.data === "object" ? body.data as Record<string, unknown> : undefined;
+  const nestedWebPages = nestedData?.webPages && typeof nestedData.webPages === "object"
+    ? nestedData.webPages as Record<string, unknown>
+    : undefined;
   return [
     ...extractSearchResultList(body.results, "web_search"),
     ...extractSearchResultList(body.web_pages, "web_search"),
     ...extractSearchResultList(body.organic, "web_search"),
     ...extractSearchResultList(nestedData?.results, "web_search"),
     ...extractSearchResultList(nestedData?.web_pages, "web_search"),
-    ...extractSearchResultList(nestedData?.organic, "web_search")
+    ...extractSearchResultList(nestedData?.organic, "web_search"),
+    ...extractSearchResultList(nestedWebPages?.value, "web_search")
   ];
 }
 

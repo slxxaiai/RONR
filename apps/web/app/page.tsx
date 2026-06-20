@@ -413,12 +413,8 @@ export default function HomePage() {
                 </div>
               )}
 
-              {!localizedError && snapshot && (
-                <MeetingSpeechStream snapshot={snapshot} streamEvents={streamEvents} t={t} />
-              )}
-
-              {!localizedError && !snapshot && streamEvents.length > 0 && (
-                <MeetingEventStream events={streamEvents} t={t} />
+              {!localizedError && (snapshot || streamEvents.length > 0) && (
+                <MeetingEventStream events={mergeMeetingEvents(snapshot, streamEvents)} t={t} />
               )}
 
               {!localizedError && !snapshot && streamEvents.length === 0 && (
@@ -988,27 +984,68 @@ function isHttpUrl(value: string): boolean {
   }
 }
 
-function MeetingSpeechStream({
-  snapshot,
-  streamEvents,
-  t
-}: {
-  snapshot: DeliberationSessionSnapshot;
-  streamEvents?: VisibleStreamEvent[];
-  t: Translator;
-}) {
+function mergeMeetingEvents(
+  snapshot: DeliberationSessionSnapshot | null,
+  streamEvents: VisibleStreamEvent[]
+): VisibleStreamEvent[] {
+  if (!snapshot) return streamEvents;
   const streamedSpeechIds = new Set(
-    (streamEvents ?? [])
+    streamEvents
       .filter((event): event is { type: "speech"; speech: Speech } => event.type === "speech")
       .map((event) => event.speech.id)
   );
-  const events = [
-    ...(streamEvents ?? []),
+  const streamedSpeechSignatures = new Set(
+    streamEvents
+      .filter((event): event is { type: "speech"; speech: Speech } => event.type === "speech")
+      .map((event) => speechReplaySignature(event.speech))
+  );
+  return [
+    ...streamEvents,
     ...snapshot.speeches
-      .filter((speech) => !streamedSpeechIds.has(speech.id))
+      .filter((speech) => !streamedSpeechIds.has(speech.id) && !streamedSpeechSignatures.has(speechReplaySignature(speech)))
       .map((speech): VisibleStreamEvent => ({ type: "speech", speech }))
   ];
-  return <MeetingEventStream events={events} t={t} />;
+}
+
+function speechReplaySignature(speech: Speech): string {
+  return JSON.stringify({
+    agentId: speech.agentId,
+    role: speech.role,
+    mandate: speech.mandate ?? "",
+    phase: speech.phase,
+    content: speech.content.trim()
+  });
+}
+
+const speechParagraphBreakMarkers = [
+  "第一[，,、]",
+  "第二[，,、]",
+  "第三[，,、]",
+  "第四[，,、]",
+  "第五[，,、]",
+  "其一[，,、]",
+  "其二[，,、]",
+  "其三[，,、]",
+  "首先[，,、]",
+  "其次[，,、]",
+  "再次[，,、]",
+  "最后[，,、]",
+  "综上[，,、]",
+  "因此[，,、]",
+  "First[,，]",
+  "Second[,，]",
+  "Third[,，]",
+  "Finally[,，]",
+  "In summary[,，]"
+];
+const speechParagraphBreakPattern = new RegExp(`(?=(?:${speechParagraphBreakMarkers.join("|")}))`, "g");
+
+function formatSpeechParagraphs(text: string): string[] {
+  return text
+    .split(/\n+/)
+    .flatMap((line) => line.split(speechParagraphBreakPattern))
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean);
 }
 
 function MeetingEventStream({
@@ -1103,6 +1140,8 @@ function AgentTurnMessage({
   const speechContent = turn.speech?.content ?? "";
   const displayedSpeechContent = useTypewriterText(speechContent);
   const isStreamingSpeech = Boolean(turn.speech && displayedSpeechContent.length < speechContent.length);
+  const speechParagraphs = formatSpeechParagraphs(displayedSpeechContent);
+  const visibleSpeechParagraphs = speechParagraphs.length > 0 ? speechParagraphs : [""];
 
   return (
     <article className="chat-message chat-turn" data-turn-id={turn.id}>
@@ -1144,10 +1183,16 @@ function AgentTurnMessage({
           </details>
         )}
         {turn.speech && (
-          <p className="speech-content">
-            {displayedSpeechContent}
-            {isStreamingSpeech && <span className="streaming-caret" aria-hidden="true" />}
-          </p>
+          <div className="speech-content">
+            {visibleSpeechParagraphs.map((paragraph, index) => (
+              <p key={index}>
+                {paragraph}
+                {isStreamingSpeech && index === visibleSpeechParagraphs.length - 1 && (
+                  <span className="streaming-caret" aria-hidden="true" />
+                )}
+              </p>
+            ))}
+          </div>
         )}
       </div>
     </article>

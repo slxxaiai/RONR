@@ -284,7 +284,17 @@ describe("API handlers", () => {
       if (url === "https://api.ppio.com/v3/web-search") {
         return new Response(
           JSON.stringify({
-            data: { results: [{ title: "Decision source", url: "https://example.com/source", snippet: "外部信息摘要" }] }
+            code: 200,
+            data: {
+              _type: "SearchResponse",
+              webPages: {
+                value: [{
+                  name: "Decision source",
+                  url: "https://example.com/source",
+                  summary: "外部信息摘要"
+                }]
+              }
+            }
           }),
           { status: 200, headers: { "Content-Type": "application/json" } }
         );
@@ -357,17 +367,34 @@ describe("API handlers", () => {
     expect(events[1]).toMatchObject({
       type: "search_sources",
       agentId: "chair",
+      status: "completed",
       sources: [{ title: "Decision source", url: "https://example.com/source", snippet: "外部信息摘要" }]
     });
+    expect(events[1]).not.toHaveProperty("errorCode");
     expect(events[2]).toMatchObject({
       type: "thinking",
-      agentId: "chair",
-      summary: "正在检索信息并整理议题确认。"
+      agentId: "chair"
     });
+    expect(events[2].summary).toContain("检索来源");
+    expect(events[2].summary).toContain("确认用户问题");
+    expect(events[2].summary).toContain("形成主议题");
+    const memberThinking = events.find((event) => event.type === "thinking" && event.agentId === "member-red");
+    expect(memberThinking?.summary).toContain("前序发言");
+    expect(memberThinking?.summary).toContain("风险");
+    expect(memberThinking?.summary).toContain("表决立场");
     expect(events[3]).toMatchObject({
       type: "speech",
       speech: { agentId: "chair", phase: "call_to_order", content: "Member 发言" }
     });
+    const chatCompletionPrompts = fetchMock.mock.calls
+      .filter(([url]) => url === "https://api.ppio.com/openai/v1/chat/completions")
+      .map(([, init]) => JSON.parse(String(init?.body)).messages[1].content as string);
+    expect(chatCompletionPrompts[1]).toContain("Deliberation Transcript:");
+    expect(chatCompletionPrompts[1]).toContain("speech-chair");
+    expect(chatCompletionPrompts[2]).toContain("speech-member-user");
+    expect(chatCompletionPrompts[2]).toContain("A 方案对用户目标更直接。");
+    expect(chatCompletionPrompts[3]).toContain("speech-member-red");
+    expect(chatCompletionPrompts[3]).toContain("主要失败路径是供应商锁定。");
     expect(events[13].sessionSnapshot.actionPlan.items[0].title).toBe("运行小规模验证");
     expect(JSON.stringify(events)).not.toContain("local-api-key-value");
     expect(JSON.stringify(events)).not.toContain("rawChainOfThought");

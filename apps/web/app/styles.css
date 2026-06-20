@@ -663,9 +663,22 @@ textarea::placeholder {
 
 .speech-content {
   color: var(--muted-foreground);
-  line-height: 1.5;
+  display: grid;
+  gap: 10px;
+  line-height: 1.72;
   margin: 0;
-  min-height: 1.5em;
+  max-width: 72ch;
+  min-height: 1.72em;
+}
+
+.speech-content p {
+  line-height: inherit;
+  margin: 0;
+}
+
+.workspace-grid.topic-collapsed .speech-content,
+.workspace-grid.role-collapsed .speech-content {
+  max-width: none;
 }
 
 .turn-disclosure {

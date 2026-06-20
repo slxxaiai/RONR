@@ -663,11 +663,49 @@ describe("RONR web app", () => {
       sessionId: sessionSnapshot.id,
       status: "completed",
       phase: "action_resolution",
-      sessionSnapshot,
+      sessionSnapshot: {
+        ...sessionSnapshot,
+        speeches: [
+          {
+            id: "snapshot-speech-chair",
+            agentId: "chair",
+            role: "chair",
+            phase: "call_to_order",
+            content: "我会先确认这个个人决策问题的范围。",
+            claims: [],
+            assumptions: []
+          },
+          {
+            id: "snapshot-speech-member-user-stream",
+            agentId: "member-user",
+            role: "member",
+            mandate: "user-advocate",
+            phase: "opening_statements",
+            content: "我会代表用户收益先发言。",
+            claims: [],
+            assumptions: []
+          },
+          {
+            id: "snapshot-speech-secretary-final",
+            agentId: "secretary",
+            role: "secretary",
+            phase: "action_resolution",
+            content: "我会补充最终行动清单摘要。",
+            claims: [],
+            assumptions: []
+          }
+        ]
+      },
       providerMeta: []
     });
     closeStream?.();
-    await waitFor(() => expect(screen.getByText("The personal version has a clearer first user.")).toBeInTheDocument());
+    await waitFor(() => expect(container.querySelector(".meeting-status-bar")).toHaveTextContent("已完成"));
+    const memberTurnAfterCompletion = container.querySelector("[data-turn-id='member-user-opening_statements']");
+    expect(memberTurnAfterCompletion).toHaveTextContent("我会代表用户收益先发言。");
+    expect(memberTurnAfterCompletion?.querySelector(".streaming-caret")).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText("我会补充最终行动清单摘要。")).toBeInTheDocument());
+    expect(container.querySelectorAll(".chat-turn")).toHaveLength(5);
+    expect(screen.queryByText("The personal version has a clearer first user.")).not.toBeInTheDocument();
     expect(container.querySelector(".meeting-status-bar")).toHaveTextContent("行动清单");
     expect(container.querySelector(".meeting-status-bar")).toHaveTextContent("已完成");
     expect(fetchMock).toHaveBeenCalledWith("/api/sessions/stream", expect.any(Object));
@@ -676,6 +714,119 @@ describe("RONR web app", () => {
     expect(css).toContain(".turn-disclosure");
     expect(css).toContain(".streaming-caret");
     expect(css).toContain("var(--muted-foreground)");
+  });
+
+  test("formats long Chinese speech content into readable paragraphs", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = input.toString();
+        if (url === "/api/providers/ppio/models") {
+          return new Response(
+            JSON.stringify({
+              models: [
+                {
+                  id: "model-a",
+                  title: "Model A",
+                  description: "A",
+                  contextSize: 32000,
+                  inputTokenPricePerM: 1,
+                  outputTokenPricePerM: 2
+                }
+              ]
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } }
+          );
+        }
+
+        return new Response(
+          JSON.stringify({
+            sessionId: sessionSnapshot.id,
+            status: "completed",
+            phase: "action_resolution",
+            initialPhase: "call_to_order",
+            activeAgentId: "member-red",
+            currentSpeakerAgentId: "member-red",
+            nextTask: "Review risks.",
+            sessionEntry: {
+              phase: "call_to_order",
+              activeAgentId: "member-red",
+              currentSpeakerAgentId: "member-red",
+              nextTask: "Review risks."
+            },
+            sessionSnapshot: {
+              ...sessionSnapshot,
+              speeches: [
+                {
+                  id: "speech-long-red-team",
+                  agentId: "member-red",
+                  role: "member",
+                  mandate: "red-team",
+                  phase: "opening_statements",
+                  content:
+                    "作为红队成员，我针对英伟达投资价值评估动议发表反方意见，重点揭示多方论据中的风险盲点。第一，基本面方面，虽然2026财年营收2160亿美元，自由现金流490亿美元看似强劲，但需追问：营收增速是否在边际放缓？第二，技术面方面，6月19日涨6.04美元至210.69美元，但6月17日跌5.04美元，说明多空分歧剧烈。第三，行业竞争方面，CUDA护城河的深度正在被侵蚀：AMD的ROCm生态持续迭代，谷歌TPU、亚马逊Trainium等自研芯片已在大客户内部部署。综上，我反对在当前价位无条件下单买入，建议投资者至少等待回调至190美元以下或下一季度财报验证营收增速后再做决策。",
+                  claims: [],
+                  assumptions: []
+                }
+              ]
+            },
+            providerMeta: []
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      })
+    );
+
+    const { container } = render(<HomePage />);
+
+    await waitFor(() => expect(screen.getByText("1 个模型已加载")).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText("个人决策问题"), {
+      target: { value: "英伟达现在能买吗？" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "启动议事" }));
+
+    await waitFor(
+      () => expect(screen.getByText("综上，我反对在当前价位无条件下单买入，建议投资者至少等待回调至190美元以下或下一季度财报验证营收增速后再做决策。")).toBeInTheDocument(),
+      { timeout: 4000 }
+    );
+    const speechParagraphs = container.querySelectorAll("[data-turn-id='member-red-opening_statements'] .speech-content p");
+    expect(speechParagraphs).toHaveLength(5);
+    expect(speechParagraphs[1]).toHaveTextContent("第一，基本面方面");
+    expect(speechParagraphs[2]).toHaveTextContent("第二，技术面方面");
+    expect(speechParagraphs[3]).toHaveTextContent("第三，行业竞争方面");
+    expect(speechParagraphs[4]).toHaveTextContent("综上，我反对");
+  });
+
+  test("lets speech content fill the Meeting Area width when sidebars are collapsed", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(
+          JSON.stringify({
+            models: [
+              {
+                id: "model-a",
+                title: "Model A",
+                description: "A",
+                contextSize: 32000,
+                inputTokenPricePerM: 1,
+                outputTokenPricePerM: 2
+              }
+            ]
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        )
+      )
+    );
+
+    const { container } = render(<HomePage />);
+
+    fireEvent.click(screen.getByRole("button", { name: "隐藏话题区" }));
+    fireEvent.click(screen.getByRole("button", { name: "隐藏角色配置区" }));
+
+    expect(container.querySelector(".workspace-grid")).toHaveClass("topic-collapsed", "role-collapsed");
+    const css = readFileSync("apps/web/app/styles.css", "utf8");
+    expect(css).toMatch(/\.workspace-grid\.topic-collapsed\s+\.speech-content,\s*\.workspace-grid\.role-collapsed\s+\.speech-content\s*\{[^}]*max-width:\s*none;/s);
   });
 
   test("updates controls and result enum labels when the locale changes", async () => {

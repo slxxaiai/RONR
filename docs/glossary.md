@@ -134,7 +134,9 @@
 | Trade-off | 取舍 | 取捨 | トレードオフ | 트레이드오프 | Benefit-cost tension between options. |
 | Source Speech | 来源发言 | 來源發言 | 出典発言 | 출처 발언 | Speech used as evidence for an output item. |
 | Source Reference | 来源引用 | 來源引用 | 出典参照 | 출처 참조 | Structured reference to a user input, attachment, speech, objection, vote, reservation, or external source summary. |
+| Deliberation Transcript | 议事转录 | 議事轉錄 | 熟議トランスクリプト | 숙의 전사 | Safe ordered transcript of prior Agent turns used as known information and positions for later speakers; excludes Raw Chain-of-Thought. |
 | Web Search Before Speech | 发言前联网搜索 | 發言前聯網搜尋 | 発言前Web検索 | 발언 전 웹 검색 | Required runtime step where an Agent searches external information before expressing a view. |
+| Search Intent | 搜索意图 | 搜尋意圖 | 検索意図 | 검색 의도 | Role-, mandate-, stage-, and prior-context-aware search query used before an Agent speaks. |
 | Search Result Summary | 搜索结果摘要 | 搜尋結果摘要 | 検索結果要約 | 검색 결과 요약 | Structured summary of search results with source references. |
 | Search Source | 搜索来源 | 搜尋來源 | 検索ソース | 검색 출처 | Source returned by web search and referenced by Agent output. |
 | User Interruption Impact | 用户插话影响 | 使用者插話影響 | ユーザー割り込みの影響 | 사용자 개입 영향 | How a user interruption changed an Action Item, constraint, priority, or stage. |
