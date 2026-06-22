@@ -28,6 +28,7 @@ RONR 的核心是多 AI Agent 议事。最小 Web 闭环需要明确哪些 Agent
 - 支持最小有效 Agent 配置。
 - 保证 Chair、Secretary 和 Member 的职责边界清晰。
 - 支持不同 Member 使用不同 mandate。
+- 支持 `domain-expert` mandate 通过 `Domain Focus` 细分领域视角。
 - 支持用户为 Deliberation 阶段设置可选的最大讨论轮次。
 
 ## Non-Goals
@@ -39,11 +40,13 @@ RONR 的核心是多 AI Agent 议事。最小 Web 闭环需要明确哪些 Agent
 ## User Flow
 
 1. 用户创建或编辑一个议事会话。
-2. 用户选择 Chair、Secretary 和至少两个 Member。
-3. 用户为 Member 选择 `general`、`user-advocate`、`domain-expert`、`action-planner` 或 `red-team` mandate。
-4. 用户可选择设置 `Max Deliberation Rounds`；如果未设置，则由 AI 自动执行 `Convergence Check`。
-5. RONR 校验配置是否满足最小议事要求。
-6. 校验通过后，议事流程可以启动。
+2. 系统默认提供 Chair、Secretary、1 名 `domain-expert` Member、2 名 `general` Member 和 2 名 `red-team` Member。
+3. 用户为每个 Agent 选择模型；默认 `domain-expert` Member 显示 `Domain Focus` select，默认值为 `product`。
+4. 用户可以删除默认 Member，也可以新增 Member。
+5. 用户新增 Member 时选择 `general`、`domain-expert`、`action-planner` 或 `red-team` mandate；当 mandate 为 `domain-expert` 时，必须选择 `Domain Focus`。
+6. 用户可选择设置 `Max Deliberation Rounds`；如果未设置，则由 AI 自动执行 `Convergence Check`。
+7. RONR 校验配置是否满足最小议事要求。
+8. 校验通过后，议事流程可以启动。
 
 ## Requirements
 
@@ -52,6 +55,10 @@ RONR 的核心是多 AI Agent 议事。最小 Web 闭环需要明确哪些 Agent
 - Member 至少 2 个且可重复。
 - 每个 Agent 必须绑定模型配置、role 和 mandate。
 - Member mandate 必须使用 glossary 中已有 canonical term。
+- `domain-expert` mandate 必须支持 `Domain Focus`，内置枚举为 `technical`、`product`、`market`、`legal`、`finance`、`industry`。
+- `domain-expert` 未显式传入 `Domain Focus` 时，系统默认使用 `product`。
+- 非 `domain-expert` mandate 不得提交 `Domain Focus`；运行时或 API 校验必须拒绝该脏配置。
+- Web UI 默认不展示 `user-advocate` 作为可选新增 mandate；底层 enum 可暂时保留以兼容旧数据。
 - `Max Deliberation Rounds` 是可选配置；用户未设置时，系统不得使用空值作为无限讨论许可。
 - 用户设置 `Max Deliberation Rounds` 时，该值必须为正整数。
 
@@ -63,22 +70,28 @@ Agent 配置是 Web、Role Runtime 和 core session 的共享契约，应先固�
 
 ## Multilingual and Glossary Impact
 
-- 复用已有术语：`Agent Configuration`、`Chair`、`Secretary`、`Member`、`Mandate`、`Model`、`Max Deliberation Rounds`、`Convergence Check`。
-- Web UI 新增添加 / 删除 Member、Member 模型、最大讨论轮次和校验提示文案，均通过 translation key 管理，并支持 `zh-CN`、`zh-TW`、`en`、`ja`、`ko`。
+- 复用已有术语：`Agent Configuration`、`Chair`、`Secretary`、`Member`、`Mandate`、`Model`、`Domain Expert`、`Max Deliberation Rounds`、`Convergence Check`。
+- 新增术语：`Domain Focus` 及其枚举值 `technical`、`product`、`market`、`legal`、`finance`、`industry`。
+- Web UI 新增添加 / 删除 Member、Member 模型、`Domain Focus`、最大讨论轮次和校验提示文案，均通过 translation key 管理，并支持 `zh-CN`、`zh-TW`、`en`、`ja`、`ko`。
 
 ## Implementation Notes
 
 - Web UI 支持用户为 Chair、Secretary 和每个 Member 选择模型。
 - Web UI 支持动态添加和删除 Member；删除按钮只在 Member 数量大于 2 时出现，保证最小议事配置。
-- 新增 Member 默认使用最近 Member 的模型，并默认使用 `general` mandate；用户可以改为 `user-advocate`、`domain-expert`、`red-team` 或 `action-planner`。
+- 默认 Member roster 为 1 名 `domain-expert`、2 名 `general`、2 名 `red-team`；默认 `domain-expert` 的 `Domain Focus` 为 `product`。
+- 新增 Member 默认使用最近 Member 的模型，并默认使用 `general` mandate；用户可以改为 `domain-expert`、`red-team` 或 `action-planner`。
+- 当新增或默认 Member 的 mandate 为 `domain-expert` 时，Web UI 在模型选择框后展示紧凑的 `Domain Focus` select；切换到非 `domain-expert` 时隐藏并移除提交 payload 中的 `domainFocus`。
 - Web UI 支持可选 `Max Deliberation Rounds`。留空时不发送该字段，代表交给后续 `Convergence Check`；填写时必须为正整数。
-- `POST /api/sessions` 会校验 Chair、Secretary、至少两个 Member、所有模型 ID、Member mandate 和可选 `maxDeliberationRounds`。
+- `POST /api/sessions` 会校验 Chair、Secretary、至少两个 Member、所有模型 ID、Member mandate、`Domain Focus` 与 mandate 的匹配关系，以及可选 `maxDeliberationRounds`。
 
 ## Acceptance Criteria
 
 - 给定 Chair、Secretary 和两个 Member 时，配置通过校验。
 - 缺少 Chair、Secretary 或 Member 数量不足时，返回清晰错误。
 - 使用未知 mandate 时，返回清晰错误。
+- `domain-expert` 携带合法 `Domain Focus` 时，配置通过校验。
+- 非 `domain-expert` 携带 `Domain Focus` 时，配置被拒绝。
+- `domain-expert` 未传 `Domain Focus` 时，系统默认补齐为 `product`。
 - 给定有效 `Max Deliberation Rounds` 时，配置通过校验。
 - 未设置 `Max Deliberation Rounds` 时，系统使用 AI 自动收敛判断。
 

@@ -2,11 +2,11 @@
 
 ## One-Line Definition
 
-记录 Deliberation Session 中的用户输入、Agent 输出、阶段推进、插话、错误和完成事件，支撑恢复和证据链。
+记录 Deliberation Session 中的用户输入、Agent 输出、阶段推进、插话、错误和完成事件，支撑恢复、证据链和 Deliberation Records。
 
 ## Status
 
-草稿
+进行中
 
 ## Priority
 
@@ -38,16 +38,18 @@
 
 ## User Flow
 
-1. 用户创建会话，系统记录 `session_created`。
+1. 用户创建会话，系统记录 `session_started`。
 2. Chair、Member、Secretary 输出时记录 Agent event。
 3. 阶段推进时记录 phase event。
 4. 用户插话、暂停或重开阶段时记录 user interruption event。
 5. 生成 Action Plan 时记录 session completed event。
+6. Deliberation Records 读取 event log 和 snapshot 进行 Meeting Replay。
 
 ## Requirements
 
-- 每个 event 必须包含 `id`、`sessionId`、`type`、`createdAt` 和 payload。
+- 每个 event 必须包含 `id`、`recordId`、`sessionId`、`userReferenceId`、`sequence`、`type`、`createdAt` 和 payload。
 - event 必须 append-only，不覆盖历史。
+- `sequence` 必须在同一 record 内单调递增。
 - session snapshot 必须能引用产生它的 event。
 - 用户插话和阶段重开不得删除旧 event。
 - Provider 错误必须记录为 event，并保持 session 可恢复。
@@ -73,9 +75,8 @@ Event Log 是状态恢复和证据链基础，应先写 append-only、重放、�
 
 ## Technical Notes
 
-P0 可以先使用内存或 fixture 表示 event log，不要求数据库。进入会话恢复、历史记录或多次运行对比时，再接入持久化存储。
+当前本地运行阶段使用 SQLite 持久化 event log，并通过 Record Repository 隔离存储实现。未来迁移 Postgres 时保留 event payload、sequence 和 snapshot 语义不变。
 
 ## Rollout
 
-先在 core 和 contracts 中定义 event 类型和 replay 规则；后续再接入 repository 和持久化。
-
+先在 stream 运行链路记录 `session_started`、`search_sources`、`thinking`、`speech`、`completed`、`error` 等事件；后续用户插话接入后继续追加 interruption event，不重写旧 event。

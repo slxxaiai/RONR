@@ -37,7 +37,8 @@ RONR AI 是一个面向个人决策的多 AI Agent 议事系统，用轻量 Robe
 |   |-- core/
 |   |-- agents/
 |   |-- providers/
-|   `-- contracts/
+|   |-- contracts/
+|   `-- db/
 |-- tests/
 |   |-- unit/
 |   |-- integration/
@@ -62,6 +63,7 @@ RONR AI 是一个面向个人决策的多 AI Agent 议事系统，用轻量 Robe
 - `packages/agents/` 存放 Role Agent Runtime、顺序角色调用和 Agent 输出 schema 校验。
 - `packages/providers/` 存放模型供应商适配层；v0 实现 OpenAI-compatible adapter 和 PPIO preset。
 - `packages/contracts/` 存放 API request / response、Agent 配置、会话快照和 provider model schema。
+- `packages/db/` 存放 Record Repository、SQLite adapter、Session Event Log 和 Snapshot 持久化边界。
 - `tests/unit/` 预留给纯逻辑的单元测试。
 - `tests/integration/` 预留给 API、持久化和模块协作的集成测试。
 - `tests/fixtures/` 存放可复用测试数据。

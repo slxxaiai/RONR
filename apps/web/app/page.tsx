@@ -9,8 +9,10 @@ import type {
   DeliberationSessionSnapshot,
   DeliberationStreamSearchSourcesEvent,
   DeliberationStreamThinkingEvent,
+  DomainFocus,
   Locale,
   Mandate,
+  MeetingRuleType,
   ProviderModel,
   Speech,
   UserInputAttachment
@@ -33,6 +35,7 @@ type RawApiError = {
 
 type AttachmentDraft = UserInputAttachment;
 type MeetingProgressState = "waiting" | "running" | "active" | "completed" | "failed";
+type TopicPanelMode = "new" | "history";
 type VisibleStreamEvent = DeliberationStreamThinkingEvent | DeliberationStreamSearchSourcesEvent | { type: "speech"; speech: Speech };
 type AgentTurn = {
   id: string;
@@ -46,11 +49,47 @@ type AgentTurn = {
   thinkingSummary?: string;
   speech?: Speech;
 };
+type ReplaySpeechItem = {
+  order: number;
+  sequence: number;
+  speech: Speech;
+  createdAt?: string;
+};
+type DeliberationRecordSummaryDto = {
+  id: string;
+  userReferenceId: string;
+  sessionId: string;
+  meetingRuleType: MeetingRuleType;
+  title: string;
+  question: string;
+  locale: Locale;
+  status: "active" | "completed" | "cancelled" | "failed";
+  phase: string;
+  actionPlanSummary?: string;
+  eventCount: number;
+  createdAt: string;
+  updatedAt: string;
+  completedAt?: string;
+};
+type SessionEventRecordDto = {
+  id: string;
+  sequence: number;
+  type: string;
+  payload: unknown;
+  createdAt: string;
+};
+type DeliberationRecordDetailDto = {
+  record: DeliberationRecordSummaryDto;
+  snapshot?: DeliberationSessionSnapshot;
+  events: SessionEventRecordDto[];
+};
 
-const mandates: Mandate[] = ["user-advocate", "domain-expert", "red-team", "general", "action-planner"];
+const configurableMandates: Mandate[] = ["domain-expert", "general", "red-team", "action-planner"];
+const domainFocuses: DomainFocus[] = ["technical", "product", "market", "legal", "finance", "industry"];
 const minimumMemberCount = 2;
 const maxAttachmentFileBytes = 64 * 1024;
 const supportedAttachmentExtensions = [".txt", ".md", ".csv", ".json"];
+const defaultMeetingRuleType: MeetingRuleType = "robert_rules";
 
 const phases = [
   "call_to_order",
@@ -83,11 +122,19 @@ const roleTranslationKeys: Record<Speech["role"], TranslationKey> = {
 };
 
 const localePreferenceKey = "ronr.locale";
+const userReferencePreferenceKey = "ronr.userReferenceId";
 
 export default function HomePage() {
   const [locale, setLocale] = useState<Locale>("zh-CN");
   const [models, setModels] = useState<ProviderModel[]>([]);
   const [agentConfig, setAgentConfig] = useState<AgentConfig>(createDefaultAgentConfig());
+  const [topicMode, setTopicMode] = useState<TopicPanelMode>("new");
+  const [userReferenceId, setUserReferenceId] = useState("");
+  const [records, setRecords] = useState<DeliberationRecordSummaryDto[]>([]);
+  const [recordsLoading, setRecordsLoading] = useState(false);
+  const [recordsLoaded, setRecordsLoaded] = useState(false);
+  const [activeRecordId, setActiveRecordId] = useState<string | null>(null);
+  const [activeRecordDetail, setActiveRecordDetail] = useState<DeliberationRecordDetailDto | null>(null);
   const [topicPanelHidden, setTopicPanelHidden] = useState(false);
   const [rolePanelHidden, setRolePanelHidden] = useState(false);
   const [maxDeliberationRoundsInput, setMaxDeliberationRoundsInput] = useState("");
@@ -120,6 +167,7 @@ export default function HomePage() {
 
   useEffect(() => {
     setLocale(getSavedLocale());
+    setUserReferenceId(getOrCreateLocalUserReferenceId());
   }, []);
 
   useEffect(() => {
@@ -185,18 +233,24 @@ export default function HomePage() {
     }
     setRunning(true);
     setError(null);
+    setActiveRecordId(null);
+    setActiveRecordDetail(null);
     setAttachmentError(null);
     setQuestionTouched(false);
     setSessionEntry(null);
     setStreamEvents([]);
     setSnapshot(null);
     try {
+      const currentUserReferenceId = userReferenceId || getOrCreateLocalUserReferenceId();
+      if (!userReferenceId) setUserReferenceId(currentUserReferenceId);
       const response = await fetch("/api/sessions/stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           userQuestion: question,
           locale,
+          userReferenceId: currentUserReferenceId,
+          meetingRuleType: defaultMeetingRuleType,
           agentConfig,
           attachments,
           ...(maxDeliberationRounds ? { maxDeliberationRounds } : {})
@@ -274,113 +328,143 @@ export default function HomePage() {
               </button>
             </div>
 
-            <label className="question-box">
-              <span>{t("session.question")}</span>
-              <textarea
-                value={question}
-                aria-invalid={showQuestionError}
-                aria-describedby={showQuestionError ? "question-error" : undefined}
-                onBlur={() => setQuestionTouched(true)}
-                onChange={(event) => {
-                  setQuestion(event.target.value);
-                  if (event.target.value.trim()) setQuestionTouched(false);
-                }}
-                placeholder={t("session.question.placeholder")}
-              />
-            </label>
-            {showQuestionError && (
-              <p className="validation-message" id="question-error" role="alert">
-                {t("session.emptyQuestion")}
-              </p>
-            )}
+            <div className="topic-mode-switch" aria-label={t("records.title")}>
+              <button
+                className={topicMode === "new" ? "topic-mode-active" : ""}
+                onClick={beginNewMeeting}
+                type="button"
+              >
+                {t("records.newMeeting")}
+              </button>
+              <button
+                className={topicMode === "history" ? "topic-mode-active" : ""}
+                onClick={() => void showHistory()}
+                type="button"
+              >
+                {t("records.history")}
+              </button>
+            </div>
 
-            <section className="attachments-panel" aria-label={t("attachments.title")}>
-              <div className="trace-card-header">
-                <h2>{t("attachments.title")}</h2>
-              </div>
-              <div className="file-picker-field">
-                <span className="file-picker-label">{t("attachments.file")}</span>
-                <span className="file-picker-control">
-                  <button
-                    className="file-picker-button"
-                    onClick={() => fileInputRef.current?.click()}
-                    type="button"
-                  >
-                    {t("attachments.chooseFile")}
-                  </button>
-                  <span className="file-picker-status">{t("attachments.noFileSelected")}</span>
-                  <input
-                    ref={fileInputRef}
-                    aria-label={t("attachments.file")}
-                    accept=".txt,.md,.csv,.json,text/plain,text/markdown,text/csv,application/json"
-                    className="file-picker-input"
-                    onChange={(event) => {
-                      void addFiles(event.currentTarget.files);
-                      event.currentTarget.value = "";
-                    }}
-                    type="file"
-                  />
-                </span>
-              </div>
-              <div className="link-input-grid">
-                <label>
-                  <span>{t("attachments.linkUrl")}</span>
-                  <input
-                    aria-label={t("attachments.linkUrl")}
-                    inputMode="url"
-                    onChange={(event) => setLinkUrl(event.target.value)}
-                    value={linkUrl}
-                  />
-                </label>
-                <label>
-                  <span>{t("attachments.linkTitle")}</span>
-                  <input
-                    aria-label={t("attachments.linkTitle")}
-                    onChange={(event) => setLinkTitle(event.target.value)}
-                    value={linkTitle}
-                  />
-                </label>
-                <label>
-                  <span>{t("attachments.linkSummary")}</span>
+            {topicMode === "new" ? (
+              <>
+                <label className="question-box">
+                  <span>{t("session.question")}</span>
                   <textarea
-                    aria-label={t("attachments.linkSummary")}
-                    className="attachment-summary-input"
-                    onChange={(event) => setLinkSummary(event.target.value)}
-                    value={linkSummary}
+                    value={question}
+                    aria-invalid={showQuestionError}
+                    aria-describedby={showQuestionError ? "question-error" : undefined}
+                    onBlur={() => setQuestionTouched(true)}
+                    onChange={(event) => {
+                      setQuestion(event.target.value);
+                      if (event.target.value.trim()) setQuestionTouched(false);
+                    }}
+                    placeholder={t("session.question.placeholder")}
                   />
                 </label>
-                <button className="secondary-action" type="button" onClick={addLinkAttachment}>
-                  {t("attachments.addLink")}
+                {showQuestionError && (
+                  <p className="validation-message" id="question-error" role="alert">
+                    {t("session.emptyQuestion")}
+                  </p>
+                )}
+
+                <section className="attachments-panel" aria-label={t("attachments.title")}>
+                  <div className="trace-card-header">
+                    <h2>{t("attachments.title")}</h2>
+                  </div>
+                  <div className="file-picker-field">
+                    <span className="file-picker-label">{t("attachments.file")}</span>
+                    <span className="file-picker-control">
+                      <button
+                        className="file-picker-button"
+                        onClick={() => fileInputRef.current?.click()}
+                        type="button"
+                      >
+                        {t("attachments.chooseFile")}
+                      </button>
+                      <span className="file-picker-status">{t("attachments.noFileSelected")}</span>
+                      <input
+                        ref={fileInputRef}
+                        aria-label={t("attachments.file")}
+                        accept=".txt,.md,.csv,.json,text/plain,text/markdown,text/csv,application/json"
+                        className="file-picker-input"
+                        onChange={(event) => {
+                          void addFiles(event.currentTarget.files);
+                          event.currentTarget.value = "";
+                        }}
+                        type="file"
+                      />
+                    </span>
+                  </div>
+                  <div className="link-input-grid">
+                    <label>
+                      <span>{t("attachments.linkUrl")}</span>
+                      <input
+                        aria-label={t("attachments.linkUrl")}
+                        inputMode="url"
+                        onChange={(event) => setLinkUrl(event.target.value)}
+                        value={linkUrl}
+                      />
+                    </label>
+                    <label>
+                      <span>{t("attachments.linkTitle")}</span>
+                      <input
+                        aria-label={t("attachments.linkTitle")}
+                        onChange={(event) => setLinkTitle(event.target.value)}
+                        value={linkTitle}
+                      />
+                    </label>
+                    <label>
+                      <span>{t("attachments.linkSummary")}</span>
+                      <textarea
+                        aria-label={t("attachments.linkSummary")}
+                        className="attachment-summary-input"
+                        onChange={(event) => setLinkSummary(event.target.value)}
+                        value={linkSummary}
+                      />
+                    </label>
+                    <button className="secondary-action" type="button" onClick={addLinkAttachment}>
+                      {t("attachments.addLink")}
+                    </button>
+                  </div>
+                  {attachmentError && (
+                    <p className="validation-message" role="alert">
+                      {t(attachmentError)}
+                    </p>
+                  )}
+                  <AttachmentList
+                    attachments={attachments}
+                    onRemove={(id) => setAttachments(attachments.filter((attachment) => attachment.id !== id))}
+                    onSummaryChange={(id, summary) => {
+                      setAttachments(attachments.map((attachment) => (
+                        attachment.id === id ? { ...attachment, summary } : attachment
+                      )));
+                    }}
+                    t={t}
+                  />
+                </section>
+
+                <button
+                  className="primary-action"
+                  disabled={running || loadingModels || models.length === 0}
+                  onClick={startSession}
+                >
+                  {running ? t("session.running") : t("session.start")}
                 </button>
-              </div>
-              {attachmentError && (
-                <p className="validation-message" role="alert">
-                  {t(attachmentError)}
-                </p>
-              )}
-              <AttachmentList
-                attachments={attachments}
-                onRemove={(id) => setAttachments(attachments.filter((attachment) => attachment.id !== id))}
-                onSummaryChange={(id, summary) => {
-                  setAttachments(attachments.map((attachment) => (
-                    attachment.id === id ? { ...attachment, summary } : attachment
-                  )));
-                }}
-                t={t}
-              />
-            </section>
 
-            <button
-              className="primary-action"
-              disabled={running || loadingModels || models.length === 0}
-              onClick={startSession}
-            >
-              {running ? t("session.running") : t("session.start")}
-            </button>
-
-            {sessionEntry && (
-              <SessionEntrySummary
-                entry={sessionEntry}
+                {sessionEntry && (
+                  <SessionEntrySummary
+                    entry={sessionEntry}
+                    t={t}
+                  />
+                )}
+              </>
+            ) : (
+              <HistoryPanel
+                activeRecordId={activeRecordId}
+                loading={recordsLoading}
+                onSelect={(recordId) => void loadRecordDetail(recordId)}
+                records={records}
+                recordsLoaded={recordsLoaded}
                 t={t}
               />
             )}
@@ -413,11 +497,19 @@ export default function HomePage() {
                 </div>
               )}
 
-              {!localizedError && (snapshot || streamEvents.length > 0) && (
-                <MeetingEventStream events={mergeMeetingEvents(snapshot, streamEvents)} t={t} />
+              {!localizedError && activeRecordDetail && (
+                <MeetingReplaySummary detail={activeRecordDetail} t={t} />
               )}
 
-              {!localizedError && !snapshot && streamEvents.length === 0 && (
+              {!localizedError && (snapshot || streamEvents.length > 0) && (
+                <MeetingEventStream
+                  animateSpeech={!activeRecordDetail}
+                  events={activeRecordDetail ? replayMeetingEventsFromRecordDetail(activeRecordDetail) : mergeMeetingEvents(snapshot, streamEvents)}
+                  t={t}
+                />
+              )}
+
+              {!localizedError && !activeRecordDetail && !snapshot && streamEvents.length === 0 && (
                 <div className="chat-thread">
                   <div className="chat-message chat-message-system">
                     <div className="chat-avatar" aria-hidden="true">AI</div>
@@ -454,54 +546,95 @@ export default function HomePage() {
             </section>
 
             <section className="panel-section role-config-section">
-              <RoleModelSelect
+              <FixedAgentConfigRow
                 label={t("roles.chair")}
+                modelLabel={t("roles.chair")}
                 value={agentConfig.chair.model}
                 models={models}
                 noModelLabel={t("session.noModel")}
                 onChange={(model) => setAgentConfig({ ...agentConfig, chair: { model } })}
               />
-              <RoleModelSelect
+              <FixedAgentConfigRow
                 label={t("roles.secretary")}
+                modelLabel={t("roles.secretary")}
                 value={agentConfig.secretary.model}
                 models={models}
                 noModelLabel={t("session.noModel")}
                 onChange={(model) => setAgentConfig({ ...agentConfig, secretary: { model } })}
               />
-              {agentConfig.members.map((member, index) => (
-                <div className="member-config" key={member.id}>
-                  <div className="member-fields">
-                    <RoleModelSelect
-                      label={`${t("roles.member")} ${index + 1} ${t("roles.model")}`}
-                      value={member.model}
-                      models={models}
-                      noModelLabel={t("session.noModel")}
-                      onChange={(model) => updateMember(index, { ...member, model })}
-                    />
-                    <label>
-                      <span>{t("roles.mandate")}</span>
-                      <select
-                        value={member.mandate}
-                        onChange={(event) => updateMember(index, { ...member, mandate: event.target.value as Mandate })}
-                      >
-                        {mandates.map((mandate) => (
-                          <option key={mandate} value={mandate}>{t(`mandate.${mandate}`)}</option>
-                        ))}
-                      </select>
-                    </label>
+              {agentConfig.members.map((member, index) => {
+                const roleLabel = formatMemberRoleLabel(member, agentConfig.members, t);
+                const isUserAddedMember = isConfigurableMember(member.id);
+                const memberFieldClassName = [
+                  "member-fields",
+                  isUserAddedMember ? "member-fields-configurable" : "",
+                  member.mandate === "domain-expert" ? "member-fields-with-focus" : ""
+                ].filter(Boolean).join(" ");
+                return (
+                  <div className="member-config" key={member.id}>
+                    <div className={memberFieldClassName}>
+                      {member.mandate === "domain-expert" ? (
+                        <>
+                          <span className="member-role-label">{roleLabel}</span>
+                          <div className="member-fields-config-row member-fields-focus-row">
+                            <DomainFocusSelect
+                              label={`${roleLabel} ${t("roles.domainFocus")}`}
+                              value={member.domainFocus ?? "product"}
+                              t={t}
+                              onChange={(domainFocus) => updateMember(index, { ...member, domainFocus })}
+                            />
+                            <RoleModelSelect
+                              label={`${roleLabel} ${t("roles.model")}`}
+                              value={member.model}
+                              models={models}
+                              noModelLabel={t("session.noModel")}
+                              onChange={(model) => updateMember(index, { ...member, model })}
+                            />
+                            {agentConfig.members.length > minimumMemberCount && (
+                              <button
+                                type="button"
+                                className="ghost-action member-remove-action"
+                                aria-label={`${t("roles.removeMember")} ${roleLabel}`}
+                                onClick={() => removeMember(index)}
+                              >
+                                {t("roles.removeMember")}
+                              </button>
+                            )}
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <span className="member-role-label">{roleLabel}</span>
+                          <RoleModelSelect
+                            label={`${roleLabel} ${t("roles.model")}`}
+                            value={member.model}
+                            models={models}
+                            noModelLabel={t("session.noModel")}
+                            onChange={(model) => updateMember(index, { ...member, model })}
+                          />
+                        </>
+                      )}
+                      {isUserAddedMember && member.mandate !== "domain-expert" && (
+                        <MandateSelect
+                          value={member.mandate}
+                          t={t}
+                          onChange={(mandate) => updateMember(index, normalizeMemberMandate({ ...member, mandate }))}
+                        />
+                      )}
+                      {agentConfig.members.length > minimumMemberCount && member.mandate !== "domain-expert" && (
+                        <button
+                          type="button"
+                          className="ghost-action member-remove-action"
+                          aria-label={`${t("roles.removeMember")} ${roleLabel}`}
+                          onClick={() => removeMember(index)}
+                        >
+                          {t("roles.removeMember")}
+                        </button>
+                      )}
+                    </div>
                   </div>
-                  {agentConfig.members.length > minimumMemberCount && (
-                    <button
-                      type="button"
-                      className="ghost-action member-remove-action"
-                      aria-label={`${t("roles.removeMember")} ${index + 1}`}
-                      onClick={() => removeMember(index)}
-                    >
-                      {t("roles.removeMember")}
-                    </button>
-                  )}
-                </div>
-              ))}
+                );
+              })}
               <button
                 type="button"
                 className="secondary-action"
@@ -544,7 +677,7 @@ export default function HomePage() {
   function updateMember(index: number, member: AgentConfig["members"][number]) {
     setAgentConfig({
       ...agentConfig,
-      members: agentConfig.members.map((item, itemIndex) => itemIndex === index ? member : item)
+      members: agentConfig.members.map((item, itemIndex) => itemIndex === index ? normalizeMemberMandate(member) : item)
     });
   }
 
@@ -569,6 +702,65 @@ export default function HomePage() {
       ...agentConfig,
       members: agentConfig.members.filter((_, itemIndex) => itemIndex !== index)
     });
+  }
+
+  function beginNewMeeting() {
+    setTopicMode("new");
+    setActiveRecordId(null);
+    setActiveRecordDetail(null);
+    setQuestion("");
+    setQuestionTouched(false);
+    setAttachments([]);
+    setAttachmentError(null);
+    setError(null);
+    setSessionEntry(null);
+    setStreamEvents([]);
+    setSnapshot(null);
+  }
+
+  async function showHistory() {
+    setTopicMode("history");
+    if (!recordsLoaded) {
+      await loadRecords();
+    }
+  }
+
+  async function loadRecords() {
+    const currentUserReferenceId = userReferenceId || getOrCreateLocalUserReferenceId();
+    if (!userReferenceId) setUserReferenceId(currentUserReferenceId);
+    setRecordsLoading(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/records?userReferenceId=${encodeURIComponent(currentUserReferenceId)}`);
+      const payload = await response.json();
+      if (!response.ok) throw payload;
+      setRecords(Array.isArray(payload.records) ? payload.records : []);
+      setRecordsLoaded(true);
+    } catch (caught) {
+      setError(normalizeError(caught));
+    } finally {
+      setRecordsLoading(false);
+    }
+  }
+
+  async function loadRecordDetail(recordId: string) {
+    const currentUserReferenceId = userReferenceId || getOrCreateLocalUserReferenceId();
+    if (!userReferenceId) setUserReferenceId(currentUserReferenceId);
+    setError(null);
+    try {
+      const response = await fetch(`/api/records/${encodeURIComponent(recordId)}?userReferenceId=${encodeURIComponent(currentUserReferenceId)}`);
+      const payload = await response.json() as DeliberationRecordDetailDto | RawApiError;
+      if (!response.ok) throw payload;
+      const detail = payload as DeliberationRecordDetailDto;
+      setActiveRecordId(recordId);
+      setActiveRecordDetail(detail);
+      setQuestion(detail.record.question);
+      setSessionEntry(sessionEntryFromRecordDetail(detail));
+      setStreamEvents(visibleStreamEventsFromRecordDetail(detail));
+      setSnapshot(detail.snapshot ?? null);
+    } catch (caught) {
+      setError(normalizeError(caught));
+    }
   }
 
   async function addFiles(fileList: FileList | null) {
@@ -714,10 +906,40 @@ function createDefaultAgentConfig(model = ""): AgentConfig {
     chair: { model },
     secretary: { model },
     members: [
-      { id: "member-user", model, mandate: "user-advocate" },
-      { id: "member-red", model, mandate: "red-team" }
+      { id: "member-domain-product", model, mandate: "domain-expert", domainFocus: "product" },
+      { id: "member-general-1", model, mandate: "general" },
+      { id: "member-general-2", model, mandate: "general" },
+      { id: "member-red-1", model, mandate: "red-team" },
+      { id: "member-red-2", model, mandate: "red-team" }
     ]
   };
+}
+
+function isConfigurableMember(memberId: string): boolean {
+  return /^member-\d+$/.test(memberId);
+}
+
+function normalizeMemberMandate(member: AgentConfig["members"][number]): AgentConfig["members"][number] {
+  if (member.mandate === "domain-expert") {
+    return { ...member, domainFocus: member.domainFocus ?? "product" };
+  }
+  const cleanMember = { ...member };
+  delete cleanMember.domainFocus;
+  return cleanMember;
+}
+
+function formatMemberRoleLabel(
+  member: AgentConfig["members"][number],
+  members: AgentConfig["members"],
+  t: Translator
+): string {
+  if (isConfigurableMember(member.id)) {
+    const number = Number(member.id.match(/^member-(\d+)$/)?.[1] ?? 0);
+    return `${t("roles.newRole")} ${number}`;
+  }
+  const sameMandateMembers = members.filter((item) => !isConfigurableMember(item.id) && item.mandate === member.mandate);
+  const roleIndex = sameMandateMembers.findIndex((item) => item.id === member.id) + 1;
+  return `${t(`mandate.${member.mandate}`)} ${roleIndex}`;
 }
 
 function nextMemberId(members: AgentConfig["members"]): string {
@@ -733,6 +955,37 @@ function parseMaxDeliberationRounds(value: string): number | null | undefined {
   if (!trimmed) return undefined;
   const parsed = Number(trimmed);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+function FixedAgentConfigRow({
+  label,
+  modelLabel,
+  value,
+  models,
+  noModelLabel,
+  onChange
+}: {
+  label: string;
+  modelLabel: string;
+  value: string;
+  models: ProviderModel[];
+  noModelLabel: string;
+  onChange: (model: string) => void;
+}) {
+  return (
+    <div className="member-config fixed-agent-config">
+      <div className="fixed-agent-fields">
+        <span className="member-role-label">{label}</span>
+        <RoleModelSelect
+          label={modelLabel}
+          value={value}
+          models={models}
+          noModelLabel={noModelLabel}
+          onChange={onChange}
+        />
+      </div>
+    </div>
+  );
 }
 
 function RoleModelSelect({
@@ -757,6 +1010,54 @@ function RoleModelSelect({
           <option key={model.id} value={model.id}>
             {model.title || model.id}
           </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function MandateSelect({
+  value,
+  t,
+  onChange
+}: {
+  value: Mandate;
+  t: Translator;
+  onChange: (mandate: Mandate) => void;
+}) {
+  return (
+    <label>
+      <span>{t("roles.mandate")}</span>
+      <select
+        aria-label={t("roles.mandate")}
+        value={value}
+        onChange={(event) => onChange(event.target.value as Mandate)}
+      >
+        {configurableMandates.map((mandate) => (
+          <option key={mandate} value={mandate}>{t(`mandate.${mandate}`)}</option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function DomainFocusSelect({
+  label,
+  value,
+  t,
+  onChange
+}: {
+  label: string;
+  value: DomainFocus;
+  t: Translator;
+  onChange: (domainFocus: DomainFocus) => void;
+}) {
+  return (
+    <label>
+      <span>{label}</span>
+      <select aria-label={label} value={value} onChange={(event) => onChange(event.target.value as DomainFocus)}>
+        {domainFocuses.map((domainFocus) => (
+          <option key={domainFocus} value={domainFocus}>{t(`domainFocus.${domainFocus}`)}</option>
         ))}
       </select>
     </label>
@@ -806,6 +1107,55 @@ function AttachmentList({
         </article>
       ))}
     </div>
+  );
+}
+
+function HistoryPanel({
+  activeRecordId,
+  loading,
+  onSelect,
+  records,
+  recordsLoaded,
+  t
+}: {
+  activeRecordId: string | null;
+  loading: boolean;
+  onSelect: (recordId: string) => void;
+  records: DeliberationRecordSummaryDto[];
+  recordsLoaded: boolean;
+  t: Translator;
+}) {
+  if (loading) {
+    return <p className="record-empty-state">{t("records.loading")}</p>;
+  }
+  if (recordsLoaded && records.length === 0) {
+    return <p className="record-empty-state">{t("records.empty")}</p>;
+  }
+  return (
+    <section className="records-panel" aria-label={t("records.title")}>
+      <div className="trace-card-header">
+        <h2>{t("records.title")}</h2>
+      </div>
+      <div className="record-list">
+        {records.map((record) => (
+          <button
+            aria-current={activeRecordId === record.id ? "true" : undefined}
+            className={`record-item${activeRecordId === record.id ? " record-item-active" : ""}`}
+            key={record.id}
+            onClick={() => onSelect(record.id)}
+            type="button"
+          >
+            <strong className="record-title">{record.title}</strong>
+            <p>{record.actionPlanSummary || record.question}</p>
+            <div className="tag-row">
+              <span>{t(`meetingRule.${record.meetingRuleType}`)}</span>
+              <span>{record.eventCount} {t("records.eventCount")}</span>
+              <span>{isKnownPhase(record.phase) ? t(`phase.${record.phase}`) : record.phase}</span>
+            </div>
+          </button>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -950,6 +1300,59 @@ function resolveMeetingProgressState({
   return "waiting";
 }
 
+function MeetingReplaySummary({
+  detail,
+  t
+}: {
+  detail: DeliberationRecordDetailDto;
+  t: Translator;
+}) {
+  const replaySpeeches = replaySpeechItemsFromRecordDetail(detail);
+
+  return (
+    <section className="replay-summary" aria-label={t("records.opened")}>
+      <div className="replay-summary-header">
+        <div>
+          <span className="replay-eyebrow">{t("records.opened")}</span>
+          <h3>{detail.record.title}</h3>
+        </div>
+        <span className="replay-status">{isKnownPhase(detail.record.phase) ? t(`phase.${detail.record.phase}`) : detail.record.phase}</span>
+      </div>
+      <p>{detail.record.question}</p>
+      <div className="tag-row">
+        <span>{t(`meetingRule.${detail.record.meetingRuleType}`)}</span>
+        <span>{detail.record.eventCount} {t("records.eventCount")}</span>
+        <span>{t(`meetingStatus.${meetingStatusKeyFromRecordStatus(detail.record.status)}`)}</span>
+      </div>
+      {replaySpeeches.length > 0 && (
+        <div className="replay-speaker-block">
+          <strong>{t("records.speakerOrder")}</strong>
+          <ol className="replay-speaker-list">
+            {replaySpeeches.map((item) => (
+              <li className="replay-speaker-item" key={`${item.sequence}-${item.speech.id}`}>
+                <span className="replay-speaker-index">{item.order}</span>
+                <span className="replay-speaker-agent">{item.speech.agentId}</span>
+                <span className="replay-speaker-meta">
+                  {t(roleTranslationKeys[item.speech.role])}
+                  {item.speech.mandate ? ` · ${t(`mandate.${item.speech.mandate}`)}` : ""}
+                  {" · "}
+                  {isKnownPhase(item.speech.phase) ? t(`phase.${item.speech.phase}`) : item.speech.phase}
+                </span>
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function meetingStatusKeyFromRecordStatus(status: DeliberationRecordSummaryDto["status"]): Extract<MeetingProgressState, "active" | "completed" | "failed"> {
+  if (status === "completed") return "completed";
+  if (status === "failed") return "failed";
+  return "active";
+}
+
 function validateAttachmentFile(file: File): TranslationKey | null {
   if (file.size > maxAttachmentFileBytes) return "attachments.fileTooLarge";
   const name = file.name.toLowerCase();
@@ -1007,6 +1410,70 @@ function mergeMeetingEvents(
   ];
 }
 
+function sessionEntryFromRecordDetail(detail: DeliberationRecordDetailDto): SessionEntryState {
+  const startedEvent = detail.events
+    .map((event) => event.payload)
+    .find((event): event is Extract<DeliberationStreamEvent, { type: "session_started" }> => (
+      isStreamEventObject(event) && event.type === "session_started"
+    ));
+  return {
+    initialPhase: "call_to_order",
+    activeAgentId: startedEvent?.activeAgentId ?? detail.snapshot?.speeches.at(-1)?.agentId ?? "chair",
+    currentSpeakerAgentId: startedEvent?.currentSpeakerAgentId ?? detail.snapshot?.speeches.at(-1)?.agentId ?? "chair",
+    nextTask: startedEvent?.nextTask ?? detail.record.actionPlanSummary ?? detail.record.title,
+    sessionEntry: {
+      phase: startedEvent?.phase ?? "call_to_order",
+      activeAgentId: startedEvent?.activeAgentId ?? "chair",
+      currentSpeakerAgentId: startedEvent?.currentSpeakerAgentId ?? "chair",
+      nextTask: startedEvent?.nextTask ?? detail.record.title
+    }
+  };
+}
+
+function visibleStreamEventsFromRecordDetail(detail: DeliberationRecordDetailDto): VisibleStreamEvent[] {
+  return orderedRecordEvents(detail.events)
+    .map((event) => event.payload)
+    .filter((event): event is VisibleStreamEvent => (
+      isStreamEventObject(event)
+      && (event.type === "thinking" || event.type === "search_sources" || event.type === "speech")
+    ));
+}
+
+function replayMeetingEventsFromRecordDetail(detail: DeliberationRecordDetailDto): VisibleStreamEvent[] {
+  return mergeMeetingEvents(detail.snapshot ?? null, visibleStreamEventsFromRecordDetail(detail));
+}
+
+function replaySpeechItemsFromRecordDetail(detail: DeliberationRecordDetailDto): ReplaySpeechItem[] {
+  const speechEvents = orderedRecordEvents(detail.events)
+    .map((event) => ({ event, payload: event.payload }))
+    .filter((item): item is { event: SessionEventRecordDto; payload: { type: "speech"; speech: Speech } } => (
+      isStreamEventObject(item.payload) && item.payload.type === "speech"
+    ));
+
+  if (speechEvents.length > 0) {
+    return speechEvents.map((item, index) => ({
+      order: index + 1,
+      sequence: item.event.sequence,
+      speech: item.payload.speech,
+      createdAt: item.event.createdAt
+    }));
+  }
+
+  return (detail.snapshot?.speeches ?? []).map((speech, index) => ({
+    order: index + 1,
+    sequence: index + 1,
+    speech
+  }));
+}
+
+function orderedRecordEvents(events: SessionEventRecordDto[]): SessionEventRecordDto[] {
+  return [...events].sort((left, right) => left.sequence - right.sequence);
+}
+
+function isStreamEventObject(value: unknown): value is DeliberationStreamEvent {
+  return Boolean(value && typeof value === "object" && "type" in value);
+}
+
 function speechReplaySignature(speech: Speech): string {
   return JSON.stringify({
     agentId: speech.agentId,
@@ -1049,9 +1516,11 @@ function formatSpeechParagraphs(text: string): string[] {
 }
 
 function MeetingEventStream({
+  animateSpeech = true,
   events,
   t
 }: {
+  animateSpeech?: boolean;
   events: VisibleStreamEvent[];
   t: Translator;
 }) {
@@ -1059,7 +1528,7 @@ function MeetingEventStream({
   return (
     <section className="chat-thread" aria-label={t("result.speeches")}>
       {turns.map((turn) => (
-        <AgentTurnMessage key={turn.id} t={t} turn={turn} />
+        <AgentTurnMessage animateSpeech={animateSpeech} key={turn.id} t={t} turn={turn} />
       ))}
     </section>
   );
@@ -1131,14 +1600,16 @@ function buildAgentTurns(events: VisibleStreamEvent[]): AgentTurn[] {
 }
 
 function AgentTurnMessage({
+  animateSpeech,
   t,
   turn
 }: {
+  animateSpeech: boolean;
   t: Translator;
   turn: AgentTurn;
 }) {
   const speechContent = turn.speech?.content ?? "";
-  const displayedSpeechContent = useTypewriterText(speechContent);
+  const displayedSpeechContent = useTypewriterText(speechContent, 6, animateSpeech);
   const isStreamingSpeech = Boolean(turn.speech && displayedSpeechContent.length < speechContent.length);
   const speechParagraphs = formatSpeechParagraphs(displayedSpeechContent);
   const visibleSpeechParagraphs = speechParagraphs.length > 0 ? speechParagraphs : [""];
@@ -1199,22 +1670,27 @@ function AgentTurnMessage({
   );
 }
 
-function useTypewriterText(target: string, delayMs = 6): string {
+function useTypewriterText(target: string, delayMs = 6, enabled = true): string {
   const [displayedText, setDisplayedText] = useState("");
 
   useEffect(() => {
+    if (!enabled) {
+      setDisplayedText(target);
+      return;
+    }
     setDisplayedText((current) => target.startsWith(current) ? current : "");
-  }, [target]);
+  }, [enabled, target]);
 
   useEffect(() => {
+    if (!enabled) return;
     if (!target || displayedText.length >= target.length) return;
     const timeout = window.setTimeout(() => {
       setDisplayedText(target.slice(0, displayedText.length + 1));
     }, delayMs);
     return () => window.clearTimeout(timeout);
-  }, [delayMs, displayedText, target]);
+  }, [delayMs, displayedText, enabled, target]);
 
-  return displayedText;
+  return enabled ? displayedText : target;
 }
 
 function isKnownPhase(phase: string): phase is Phase {
@@ -1311,6 +1787,15 @@ function getSavedLocale(): Locale {
   if (typeof window === "undefined") return "zh-CN";
   const savedLocale = window.localStorage.getItem(localePreferenceKey);
   return locales.includes(savedLocale as Locale) ? (savedLocale as Locale) : "zh-CN";
+}
+
+function getOrCreateLocalUserReferenceId(): string {
+  if (typeof window === "undefined") return "";
+  const savedUserReferenceId = window.localStorage.getItem(userReferencePreferenceKey);
+  if (savedUserReferenceId) return savedUserReferenceId;
+  const nextUserReferenceId = `local-anonymous-${crypto.randomUUID()}`;
+  window.localStorage.setItem(userReferencePreferenceKey, nextUserReferenceId);
+  return nextUserReferenceId;
 }
 
 function syncDescriptionMeta(content: string) {

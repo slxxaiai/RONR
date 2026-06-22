@@ -124,11 +124,14 @@ Prompt template 必须作为可配置资源存放在 `packages/agents/prompts/`�
 - 流式事件 schema；仅在接入实时输出时新增。
 - Web 与后端共享的 DTO。
 
-### 3.6 Future Modules
+### 3.6 Persistence Module
+
+`packages/db/` 已用于当前本地会议记录能力，负责 Record Repository、SQLite adapter、Session Event Log 和 Session Snapshot 持久化边界。业务层和 Web API 只依赖 repository contract，不直接依赖 SQLite SQL；未来迁移 Postgres 时应新增 adapter，而不是改写核心领域对象。
+
+### 3.7 Future Modules
 
 技术选型确定为 TypeScript-first 后，可以按需要扩展以下模块，但不要求当前立即创建目录：
 
-- `packages/db/`：承载会话快照、事件日志、repository 和 migration。
 - `packages/ui/`：承载跨 Web、手机 App 和桌面 App 复用的 UI 基础组件。
 - `packages/evaluation/`：承载议事质量评估，例如分歧暴露、风险覆盖、行动项可执行性和证据链完整性。
 - `apps/mobile/`：承载后续手机 App。
@@ -403,7 +406,7 @@ MVP 应优先保存两类数据：
 - 行动项需要追溯到具体发言、风险和表决。
 - 后续质量评估可以基于完整议事过程计算。
 
-在没有数据库前，可以先用内存、fixture 或本地文件表示；需要本地恢复、历史记录或服务端多用户能力时，再按 `docs/tech-stack.md` 的阶段策略评估 SQLite、Postgres 或 ORM。选择不应泄漏到核心领域模块。
+当前本地运行阶段使用 SQLite adapter 保存 Deliberation Records、Event Log 和 Session Snapshot。需要服务端多用户、跨设备历史、复杂查询、备份和权限隔离时，再按 `docs/tech-stack.md` 的阶段策略迁移到 Postgres 或引入 ORM。选择不应泄漏到核心领域模块。
 
 ## 10. Deliberation Trace
 

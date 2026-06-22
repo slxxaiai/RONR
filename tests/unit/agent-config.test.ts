@@ -10,7 +10,7 @@ describe("agent configuration", () => {
         chair: { model: "model-a" },
         secretary: { model: "model-a" },
         members: [
-          { id: "member-user", model: "model-a", mandate: "user-advocate" },
+          { id: "member-product", model: "model-a", mandate: "domain-expert", domainFocus: "product" },
           { id: "member-red", model: "model-b", mandate: "red-team" }
         ]
       },
@@ -20,12 +20,66 @@ describe("agent configuration", () => {
     expect(result.success).toBe(true);
   });
 
+  test("accepts Domain Expert domainFocus and rejects domainFocus on other mandates", () => {
+    const valid = validateAgentConfig(
+      {
+        chair: { model: "model-a" },
+        secretary: { model: "model-a" },
+        members: [
+          { id: "member-technical", model: "model-a", mandate: "domain-expert", domainFocus: "technical" },
+          { id: "member-market", model: "model-b", mandate: "domain-expert", domainFocus: "market" }
+        ]
+      },
+      availableModels
+    );
+    expect(valid.success).toBe(true);
+
+    const invalid = validateAgentConfig(
+      {
+        chair: { model: "model-a" },
+        secretary: { model: "model-a" },
+        members: [
+          { id: "member-general", model: "model-a", mandate: "general", domainFocus: "product" },
+          { id: "member-red", model: "model-b", mandate: "red-team" }
+        ]
+      },
+      availableModels
+    );
+    expect(invalid).toEqual({
+      success: false,
+      errors: ["members[0].domainFocus 仅支持 domain-expert mandate"]
+    });
+  });
+
+  test("defaults missing Domain Expert domainFocus to product in create session requests", () => {
+    const result = createSessionRequestSchema.safeParse({
+      userQuestion: "我应该先做个人版还是团队版？",
+      locale: "zh-CN",
+      agentConfig: {
+        chair: { model: "model-a" },
+        secretary: { model: "model-a" },
+        members: [
+          { id: "member-domain", model: "model-a", mandate: "domain-expert" },
+          { id: "member-red", model: "model-b", mandate: "red-team" }
+        ]
+      }
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.agentConfig.members[0]).toMatchObject({
+        mandate: "domain-expert",
+        domainFocus: "product"
+      });
+    }
+  });
+
   test("accepts optional positive Max Deliberation Rounds and rejects invalid values", () => {
     const agentConfig = {
       chair: { model: "model-a" },
       secretary: { model: "model-a" },
       members: [
-        { id: "member-user", model: "model-a", mandate: "user-advocate" },
+        { id: "member-domain", model: "model-a", mandate: "domain-expert", domainFocus: "product" },
         { id: "member-red", model: "model-b", mandate: "red-team" }
       ]
     };

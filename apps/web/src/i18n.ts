@@ -12,6 +12,8 @@ export type TranslationKey =
   | "roles.member"
   | "roles.mandate"
   | "roles.model"
+  | "roles.domainFocus"
+  | "roles.newRole"
   | "roles.addMember"
   | "roles.removeMember"
   | "roles.maxRounds"
@@ -29,6 +31,17 @@ export type TranslationKey =
   | "session.activeAgent"
   | "session.currentSpeaker"
   | "session.emptyQuestion"
+  | "records.newMeeting"
+  | "records.history"
+  | "records.title"
+  | "records.loading"
+  | "records.empty"
+  | "records.eventCount"
+  | "records.replay"
+  | "records.meetingRule"
+  | "records.opened"
+  | "records.speakerOrder"
+  | "meetingRule.robert_rules"
   | "layout.topicPanel"
   | "layout.meetingArea"
   | "layout.roleConfigPanel"
@@ -121,6 +134,12 @@ export type TranslationKey =
   | "mandate.domain-expert"
   | "mandate.action-planner"
   | "mandate.red-team"
+  | "domainFocus.technical"
+  | "domainFocus.product"
+  | "domainFocus.market"
+  | "domainFocus.legal"
+  | "domainFocus.finance"
+  | "domainFocus.industry"
   | "phase.call_to_order"
   | "phase.main_motion"
   | "phase.opening_statements"
@@ -164,6 +183,8 @@ const zhCN: Record<TranslationKey, string> = {
   "roles.member": "议员",
   "roles.mandate": "职责授权",
   "roles.model": "模型",
+  "roles.domainFocus": "领域焦点",
+  "roles.newRole": "新角色",
   "roles.addMember": "添加议员",
   "roles.removeMember": "删除",
   "roles.maxRounds": "最大讨论轮次",
@@ -181,6 +202,17 @@ const zhCN: Record<TranslationKey, string> = {
   "session.activeAgent": "当前调度 Agent",
   "session.currentSpeaker": "当前发言 Agent",
   "session.emptyQuestion": "请先输入一个个人决策问题。",
+  "records.newMeeting": "新建会议",
+  "records.history": "历史会议",
+  "records.title": "会议记录",
+  "records.loading": "正在加载历史会议",
+  "records.empty": "暂无历史会议。",
+  "records.eventCount": "个事件",
+  "records.replay": "回放",
+  "records.meetingRule": "会议规则",
+  "records.opened": "历史记录已打开",
+  "records.speakerOrder": "发言顺序",
+  "meetingRule.robert_rules": "罗伯特议事规则",
   "layout.topicPanel": "话题区",
   "layout.meetingArea": "会议区",
   "layout.roleConfigPanel": "角色配置区",
@@ -273,6 +305,12 @@ const zhCN: Record<TranslationKey, string> = {
   "mandate.domain-expert": "领域专家",
   "mandate.action-planner": "行动规划者",
   "mandate.red-team": "红队议员",
+  "domainFocus.technical": "技术",
+  "domainFocus.product": "产品",
+  "domainFocus.market": "市场",
+  "domainFocus.legal": "法律/合规",
+  "domainFocus.finance": "财务",
+  "domainFocus.industry": "行业/场景",
   "phase.call_to_order": "议题确认",
   "phase.main_motion": "主议题",
   "phase.opening_statements": "开场陈述",
@@ -320,6 +358,8 @@ const translations: Partial<Record<Locale, Partial<Record<TranslationKey, string
     "roles.member": "議員",
     "roles.mandate": "職責授權",
     "roles.model": "模型",
+    "roles.domainFocus": "領域焦點",
+    "roles.newRole": "新角色",
     "roles.addMember": "新增議員",
     "roles.removeMember": "刪除",
     "roles.maxRounds": "最大討論輪次",
@@ -337,6 +377,17 @@ const translations: Partial<Record<Locale, Partial<Record<TranslationKey, string
     "session.activeAgent": "目前調度 Agent",
     "session.currentSpeaker": "目前發言 Agent",
     "session.emptyQuestion": "請先輸入一個個人決策問題。",
+    "records.newMeeting": "新建會議",
+    "records.history": "歷史會議",
+    "records.title": "會議記錄",
+    "records.loading": "正在載入歷史會議",
+    "records.empty": "暫無歷史會議。",
+    "records.eventCount": "個事件",
+    "records.replay": "回放",
+    "records.meetingRule": "會議規則",
+    "records.opened": "歷史記錄已打開",
+    "records.speakerOrder": "發言順序",
+    "meetingRule.robert_rules": "羅伯特議事規則",
     "layout.topicPanel": "話題區",
     "layout.meetingArea": "會議區",
     "layout.roleConfigPanel": "角色設定區",
@@ -429,6 +480,12 @@ const translations: Partial<Record<Locale, Partial<Record<TranslationKey, string
     "mandate.domain-expert": "領域專家",
     "mandate.action-planner": "行動規劃者",
     "mandate.red-team": "紅隊議員",
+    "domainFocus.technical": "技術",
+    "domainFocus.product": "產品",
+    "domainFocus.market": "市場",
+    "domainFocus.legal": "法律/合規",
+    "domainFocus.finance": "財務",
+    "domainFocus.industry": "產業/場景",
     "phase.call_to_order": "議題確認",
     "phase.main_motion": "主議題",
     "phase.opening_statements": "開場陳述",
@@ -473,6 +530,8 @@ const translations: Partial<Record<Locale, Partial<Record<TranslationKey, string
     "roles.member": "Member",
     "roles.mandate": "Mandate",
     "roles.model": "Model",
+    "roles.domainFocus": "Domain Focus",
+    "roles.newRole": "New Role",
     "roles.addMember": "Add Member",
     "roles.removeMember": "Remove",
     "roles.maxRounds": "Max Deliberation Rounds",
@@ -490,6 +549,17 @@ const translations: Partial<Record<Locale, Partial<Record<TranslationKey, string
     "session.activeAgent": "Active Agent",
     "session.currentSpeaker": "Current Speaker",
     "session.emptyQuestion": "Enter a personal decision question first.",
+    "records.newMeeting": "New Meeting",
+    "records.history": "History",
+    "records.title": "Meeting Records",
+    "records.loading": "Loading history",
+    "records.empty": "No meeting records yet.",
+    "records.eventCount": "events",
+    "records.replay": "Replay",
+    "records.meetingRule": "Meeting Rule",
+    "records.opened": "History record opened",
+    "records.speakerOrder": "Speaker Order",
+    "meetingRule.robert_rules": "Robert's Rules of Order",
     "layout.topicPanel": "Topic Panel",
     "layout.meetingArea": "Meeting Area",
     "layout.roleConfigPanel": "Role Configuration Panel",
@@ -582,6 +652,12 @@ const translations: Partial<Record<Locale, Partial<Record<TranslationKey, string
     "mandate.domain-expert": "Domain Expert",
     "mandate.action-planner": "Action Planner",
     "mandate.red-team": "Red Team Member",
+    "domainFocus.technical": "Technical",
+    "domainFocus.product": "Product",
+    "domainFocus.market": "Market",
+    "domainFocus.legal": "Legal / Compliance",
+    "domainFocus.finance": "Finance",
+    "domainFocus.industry": "Industry / Scenario",
     "phase.call_to_order": "Call to Order",
     "phase.main_motion": "Main Motion",
     "phase.opening_statements": "Opening Statements",
@@ -626,6 +702,8 @@ const translations: Partial<Record<Locale, Partial<Record<TranslationKey, string
     "roles.member": "議員",
     "roles.mandate": "任務権限",
     "roles.model": "モデル",
+    "roles.domainFocus": "領域焦点",
+    "roles.newRole": "新規ロール",
     "roles.addMember": "議員を追加",
     "roles.removeMember": "削除",
     "roles.maxRounds": "最大熟議ラウンド数",
@@ -643,6 +721,17 @@ const translations: Partial<Record<Locale, Partial<Record<TranslationKey, string
     "session.activeAgent": "アクティブ Agent",
     "session.currentSpeaker": "現在の発言 Agent",
     "session.emptyQuestion": "個人の意思決定課題を先に入力してください。",
+    "records.newMeeting": "新規会議",
+    "records.history": "履歴会議",
+    "records.title": "会議記録",
+    "records.loading": "履歴会議を読み込み中",
+    "records.empty": "会議記録はまだありません。",
+    "records.eventCount": "件のイベント",
+    "records.replay": "再生",
+    "records.meetingRule": "会議規則",
+    "records.opened": "履歴記録を開きました",
+    "records.speakerOrder": "発言順",
+    "meetingRule.robert_rules": "ロバート議事規則",
     "layout.topicPanel": "トピックパネル",
     "layout.meetingArea": "会議エリア",
     "layout.roleConfigPanel": "ロール設定パネル",
@@ -735,6 +824,12 @@ const translations: Partial<Record<Locale, Partial<Record<TranslationKey, string
     "mandate.domain-expert": "領域専門家",
     "mandate.action-planner": "行動計画者",
     "mandate.red-team": "レッドチーム議員",
+    "domainFocus.technical": "技術",
+    "domainFocus.product": "プロダクト",
+    "domainFocus.market": "市場",
+    "domainFocus.legal": "法務/コンプライアンス",
+    "domainFocus.finance": "財務",
+    "domainFocus.industry": "業界/シナリオ",
     "phase.call_to_order": "議題確認",
     "phase.main_motion": "主動議",
     "phase.opening_statements": "冒頭陳述",
@@ -779,6 +874,8 @@ const translations: Partial<Record<Locale, Partial<Record<TranslationKey, string
     "roles.member": "의원",
     "roles.mandate": "책무 위임",
     "roles.model": "모델",
+    "roles.domainFocus": "도메인 초점",
+    "roles.newRole": "새 역할",
     "roles.addMember": "의원 추가",
     "roles.removeMember": "삭제",
     "roles.maxRounds": "최대 숙의 라운드 수",
@@ -796,6 +893,17 @@ const translations: Partial<Record<Locale, Partial<Record<TranslationKey, string
     "session.activeAgent": "활성 Agent",
     "session.currentSpeaker": "현재 발언 Agent",
     "session.emptyQuestion": "먼저 개인 의사결정 질문을 입력하세요.",
+    "records.newMeeting": "새 회의",
+    "records.history": "기록 회의",
+    "records.title": "회의 기록",
+    "records.loading": "기록 회의 불러오는 중",
+    "records.empty": "아직 회의 기록이 없습니다.",
+    "records.eventCount": "개 이벤트",
+    "records.replay": "재생",
+    "records.meetingRule": "회의 규칙",
+    "records.opened": "기록을 열었습니다",
+    "records.speakerOrder": "발언 순서",
+    "meetingRule.robert_rules": "로버트 의사규칙",
     "layout.topicPanel": "주제 패널",
     "layout.meetingArea": "회의 영역",
     "layout.roleConfigPanel": "역할 구성 패널",
@@ -888,6 +996,12 @@ const translations: Partial<Record<Locale, Partial<Record<TranslationKey, string
     "mandate.domain-expert": "도메인 전문가",
     "mandate.action-planner": "실행 계획자",
     "mandate.red-team": "레드팀 의원",
+    "domainFocus.technical": "기술",
+    "domainFocus.product": "제품",
+    "domainFocus.market": "시장",
+    "domainFocus.legal": "법무/컴플라이언스",
+    "domainFocus.finance": "재무",
+    "domainFocus.industry": "산업/시나리오",
     "phase.call_to_order": "의제 확인",
     "phase.main_motion": "주 동의안",
     "phase.opening_statements": "개회 발언",

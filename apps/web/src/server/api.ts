@@ -1,4 +1,13 @@
+import { join } from "node:path";
 import { createSessionRequestSchema, validateAgentConfig } from "@ronr/contracts";
+import type { CreateSessionRequest, DeliberationSessionSnapshot, DeliberationStreamEvent } from "@ronr/contracts";
+import {
+  createSqliteDeliberationRecordRepository
+} from "@ronr/db";
+import type {
+  DeliberationRecordRepository,
+  DeliberationRecordSummary
+} from "@ronr/db";
 import type { ProviderLocalConfig } from "@ronr/providers";
 import {
   createOpenAICompatibleProvider,
@@ -7,6 +16,10 @@ import {
   ProviderRuntimeError
 } from "@ronr/providers";
 import { runDeliberation, runDeliberationStream } from "@ronr/agents";
+
+export interface ApiHandlerOptions {
+  recordRepository?: DeliberationRecordRepository;
+}
 
 export async function handleListModels(
   fetchImpl: typeof fetch = fetch,
@@ -51,7 +64,8 @@ export async function handleCreateSession(
   requestBody: unknown,
   fetchImpl: typeof fetch = fetch,
   config?: ProviderLocalConfig,
-  availableModelIds?: string[]
+  availableModelIds?: string[],
+  options: ApiHandlerOptions = {}
 ): Promise<Response> {
   try {
     config ??= loadProviderConfig();
@@ -81,10 +95,40 @@ export async function handleCreateSession(
       );
     }
 
+    const recordRepository = parsed.data.userReferenceId
+      ? options.recordRepository ?? getDefaultRecordRepository()
+      : undefined;
     const { snapshot, providerMeta, sessionEntry } = await runDeliberation(parsed.data, provider);
+    const record = parsed.data.userReferenceId && recordRepository
+      ? await persistCompletedRecord({
+          repository: recordRepository,
+          request: parsed.data,
+          sessionId: snapshot.id,
+          events: [
+            {
+              type: "session_started",
+              sessionId: snapshot.id,
+              phase: sessionEntry.phase,
+              activeAgentId: sessionEntry.activeAgentId,
+              currentSpeakerAgentId: sessionEntry.currentSpeakerAgentId,
+              nextTask: sessionEntry.nextTask
+            },
+            {
+              type: "completed",
+              sessionId: snapshot.id,
+              status: snapshot.status,
+              phase: snapshot.phase,
+              sessionSnapshot: snapshot,
+              providerMeta
+            }
+          ],
+          snapshot
+        })
+      : null;
     return Response.json(
       {
         sessionId: snapshot.id,
+        ...(record ? { recordId: record.id, meetingRuleType: record.meetingRuleType } : {}),
         status: snapshot.status,
         phase: snapshot.phase,
         initialPhase: sessionEntry.phase,
@@ -106,7 +150,8 @@ export async function handleCreateSessionStream(
   requestBody: unknown,
   fetchImpl: typeof fetch = fetch,
   config?: ProviderLocalConfig,
-  availableModelIds?: string[]
+  availableModelIds?: string[],
+  options: ApiHandlerOptions = {}
 ): Promise<Response> {
   const encoder = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
@@ -141,8 +186,55 @@ export async function handleCreateSessionStream(
           return;
         }
 
+        const repository = parsed.data.userReferenceId
+          ? options.recordRepository ?? getDefaultRecordRepository()
+          : undefined;
+        let record: DeliberationRecordSummary | null = null;
+        let sequence = 0;
         for await (const event of runDeliberationStream(parsed.data, provider)) {
-          write(event);
+          if (event.type === "session_started" && parsed.data.userReferenceId && repository) {
+            await repository.ensureUserReference({
+              id: parsed.data.userReferenceId,
+              type: "local_anonymous"
+            });
+            record = await repository.createRecord({
+              userReferenceId: parsed.data.userReferenceId,
+              sessionId: event.sessionId,
+              meetingRuleType: parsed.data.meetingRuleType,
+              title: buildRecordTitle(parsed.data.userQuestion),
+              question: parsed.data.userQuestion,
+              locale: parsed.data.locale,
+              status: "active",
+              phase: event.phase
+            });
+          }
+          const outputEvent = record ? attachRecordToStreamEvent(event, record) : event;
+          if (record && parsed.data.userReferenceId) {
+            sequence += 1;
+            await repository?.appendEvent({
+              recordId: record.id,
+              sessionId: record.sessionId,
+              userReferenceId: parsed.data.userReferenceId,
+              sequence,
+              type: outputEvent.type,
+              payload: outputEvent
+            });
+            if (outputEvent.type === "completed") {
+              await repository?.saveSnapshot({
+                recordId: record.id,
+                sessionId: record.sessionId,
+                snapshot: outputEvent.sessionSnapshot,
+                version: 1
+              });
+              await repository?.completeRecord({
+                recordId: record.id,
+                status: "completed",
+                phase: outputEvent.phase,
+                actionPlanSummary: outputEvent.sessionSnapshot.actionPlan.summary
+              });
+            }
+          }
+          write(outputEvent);
         }
       } catch (error) {
         write(toStreamError(error));
@@ -159,6 +251,55 @@ export async function handleCreateSessionStream(
       "Cache-Control": "no-cache, no-transform"
     }
   });
+}
+
+export async function handleListRecords(
+  searchParams: URLSearchParams,
+  repository: DeliberationRecordRepository = getDefaultRecordRepository()
+): Promise<Response> {
+  const userReferenceId = searchParams.get("userReferenceId")?.trim();
+  if (!userReferenceId) {
+    return Response.json(
+      {
+        code: "invalid_request",
+        message: "缺少 userReferenceId。",
+        recoveryHint: "请传入本地用户引用后再读取历史记录。"
+      },
+      { status: 400 }
+    );
+  }
+  const records = await repository.listRecordsByUser(userReferenceId);
+  return Response.json({ records }, { status: 200 });
+}
+
+export async function handleGetRecordDetail(
+  recordId: string,
+  searchParams: URLSearchParams,
+  repository: DeliberationRecordRepository = getDefaultRecordRepository()
+): Promise<Response> {
+  const userReferenceId = searchParams.get("userReferenceId")?.trim();
+  if (!recordId || !userReferenceId) {
+    return Response.json(
+      {
+        code: "invalid_request",
+        message: "缺少 recordId 或 userReferenceId。",
+        recoveryHint: "请传入记录 ID 和本地用户引用后再读取历史记录。"
+      },
+      { status: 400 }
+    );
+  }
+  const detail = await repository.getRecordDetail(recordId, userReferenceId);
+  if (!detail) {
+    return Response.json(
+      {
+        code: "record_not_found",
+        message: "未找到该议事记录。",
+        recoveryHint: "确认记录属于当前本地用户引用。"
+      },
+      { status: 404 }
+    );
+  }
+  return Response.json(detail, { status: 200 });
 }
 
 function errorResponse(error: unknown): Response {
@@ -192,6 +333,82 @@ function errorResponse(error: unknown): Response {
     },
     { status: 500 }
   );
+}
+
+async function persistCompletedRecord(input: {
+  repository: DeliberationRecordRepository;
+  request: CreateSessionRequest;
+  sessionId: string;
+  events: DeliberationStreamEvent[];
+  snapshot: DeliberationSessionSnapshot;
+}): Promise<DeliberationRecordSummary | null> {
+  if (!input.request.userReferenceId) return null;
+  await input.repository.ensureUserReference({
+    id: input.request.userReferenceId,
+    type: "local_anonymous"
+  });
+  const record = await input.repository.createRecord({
+    userReferenceId: input.request.userReferenceId,
+    sessionId: input.sessionId,
+    meetingRuleType: input.request.meetingRuleType,
+    title: buildRecordTitle(input.request.userQuestion),
+    question: input.request.userQuestion,
+    locale: input.request.locale,
+    status: "active",
+    phase: "call_to_order"
+  });
+  for (const [index, event] of input.events.entries()) {
+    const outputEvent = attachRecordToStreamEvent(event, record);
+    await input.repository.appendEvent({
+      recordId: record.id,
+      sessionId: record.sessionId,
+      userReferenceId: input.request.userReferenceId,
+      sequence: index + 1,
+      type: outputEvent.type,
+      payload: outputEvent
+    });
+  }
+  await input.repository.saveSnapshot({
+    recordId: record.id,
+    sessionId: record.sessionId,
+    snapshot: input.snapshot,
+    version: 1
+  });
+  return input.repository.completeRecord({
+    recordId: record.id,
+    status: "completed",
+    phase: input.snapshot.phase,
+    actionPlanSummary: input.snapshot.actionPlan.summary
+  });
+}
+
+function attachRecordToStreamEvent(
+  event: DeliberationStreamEvent,
+  record: DeliberationRecordSummary
+): DeliberationStreamEvent {
+  if (event.type === "session_started" || event.type === "completed") {
+    return {
+      ...event,
+      recordId: record.id,
+      meetingRuleType: record.meetingRuleType
+    };
+  }
+  return event;
+}
+
+function buildRecordTitle(question: string): string {
+  const normalized = question.replace(/\s+/g, " ").trim();
+  return normalized.length > 48 ? `${normalized.slice(0, 48)}...` : normalized;
+}
+
+let defaultRecordRepository: DeliberationRecordRepository | null = null;
+
+function getDefaultRecordRepository(): DeliberationRecordRepository {
+  if (!defaultRecordRepository) {
+    const databasePath = process.env.RONR_DB_PATH ?? join(process.cwd(), "data", "ronr.sqlite");
+    defaultRecordRepository = createSqliteDeliberationRecordRepository({ databasePath });
+  }
+  return defaultRecordRepository;
 }
 
 function toStreamError(error: unknown) {

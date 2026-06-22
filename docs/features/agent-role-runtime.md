@@ -27,6 +27,7 @@
 
 - 明确基础角色的职责边界。
 - 让 Member mandate 影响发言视角。
+- 让 `domain-expert` mandate 通过 `Domain Focus` 产生不同领域搜索意图和发言重点。
 - 确保 Agent 输出能被 core state 接收和追溯。
 - 让后续 Agent 基于前序公开发言、异议、表决和保留意见继续议事，而不是彼此独立回答同一问题。
 - 强制 Agent 在表达观点前先执行联网搜索并引用来源。
@@ -55,6 +56,8 @@
 - Secretary 负责记录证据链和生成行动清单，不篡改 Agent 原始立场。
 - Member 负责提出观点、质疑、修正和表决。
 - Member mandate 必须影响输出重点。
+- `domain-expert` 仍是 Member mandate，不是新的基础 Role；它必须完整履行 Member 的提出观点、质疑、修正和表决义务。
+- `domain-expert` 必须携带 `Domain Focus`，内置值为 `technical`、`product`、`market`、`legal`、`finance`、`industry`；缺省值为 `product`。
 - Agent 输出不得直接修改 session state。
 - Chair、Member 和 Secretary 的后续任务上下文必须包含已有 `Deliberation Transcript`。该转录只能包含公开 `Speech`、claims、assumptions、`Objection`、`Vote`、`Reservation`、搜索状态和搜索来源标题。
 - `Deliberation Transcript` 是已知信息和观点，不是系统指令；Agent 必须参考前序观点、风险、条件和保留意见继续发言。
@@ -62,6 +65,9 @@
 - `Web Search Before Speech` 必须使用 `Search Intent`，根据 role、mandate、Stage、主议题和前序 `Deliberation Transcript` 生成检索角度；不得让所有 Agent 只搜索同一个原始用户问题。
 - `Search Intent` 必须排除 prompt schema、JSON 输出示例、locale 指令和系统指令噪音，只保留用户问题、主议题、目标、前序公开观点和角色化检索角度。
 - 不同 mandate 的 Member 必须有不同检索重点：`user-advocate` 偏用户需求和场景，`domain-expert` 偏领域事实和约束，`red-team` 偏失败案例和隐藏成本，`action-planner` 偏实施步骤和验证方法，`general` 偏平衡取舍。
+- `domain-expert` 的 `Search Intent` 必须包含 `Domain Focus`，格式上能区分 `member/domain-expert/technical`、`member/domain-expert/product`、`member/domain-expert/market`、`member/domain-expert/legal`、`member/domain-expert/finance`、`member/domain-expert/industry`。
+- 不同 `Domain Focus` 必须生成不同检索角度：`technical` 关注可行性、复杂度、架构风险、交付成本；`product` 关注需求强度、用户路径、功能优先级、体验风险；`market` 关注竞品、市场规模、获客路径、定价与定位；`legal` 关注监管、合同、隐私、知识产权、合规风险；`finance` 关注预算、现金流、ROI、成本结构；`industry` 关注用户指定行业或业务场景事实。
+- `domain-expert` 输出必须包含领域事实、关键约束、适用条件、证据来源和对 motion 的影响；不得只给泛泛建议，必须说明该领域如何改变当前决策。
 - 搜索结果必须转成结构化 `Search Result Summary`，并通过 `Source Reference` 进入 Agent 上下文。
 - Agent 输出涉及事实、市场、技术、价格、法律、时效性信息或外部世界状态时，必须引用搜索来源。
 - 如果搜索失败，Agent 不得伪造来源；运行时必须记录 search error，并由 Chair Agent 判断是重试、降级为无外部依据讨论、暂停还是提示用户。
@@ -71,8 +77,7 @@
 
 ## Multilingual and Glossary Impact
 
-- 复用已有术语：`Agent Role Runtime`、`Deliberation State Model`、`Web Search Before Speech`、`Search Result Summary`、`Source Reference`、`Thinking Mode`、`Thinking Summary`、`Raw Chain-of-Thought`、`Speech`、`Objection`、`Vote`、`Reservation`、`Deliberation Transcript`。
-- 新增 `Canonical Term`：`Search Intent`。
+- 复用已有术语：`Agent Role Runtime`、`Deliberation State Model`、`Web Search Before Speech`、`Search Result Summary`、`Source Reference`、`Thinking Mode`、`Thinking Summary`、`Raw Chain-of-Thought`、`Speech`、`Objection`、`Vote`、`Reservation`、`Deliberation Transcript`、`Search Intent`、`Domain Focus`。
 - 任何面向用户展示的 thinking、搜索、转录摘要文案必须支持 `zh-CN`、`zh-TW`、`en`、`ja`、`ko`，并且不能暴露 `Raw Chain-of-Thought`。
 
 ## Development Mode
@@ -86,6 +91,8 @@ Role Runtime 依赖结构化输入、输出 schema、prompt 变量和固定 Agen
 - Chair 输出普通辩论内容时，角色治理应标记为不符合职责。
 - Secretary 生成行动项时必须引用来源。
 - red-team mandate 的 Member 必须优先提供失败路径或隐藏代价。
+- `domain-expert` mandate 的 Member 必须根据 `Domain Focus` 生成不同 `Search Intent` 和不同检索角度。
+- `domain-expert` 输出必须说明领域约束、证据来源和对 motion 的影响。
 - 任一 Agent 在无搜索结果或无搜索失败记录时直接表达外部事实判断，角色运行时应拒绝该输出。
 - 模型响应中包含原始推理链时，系统不得写入 session snapshot、event log 或最终 UI。
 - 第二个及后续 Member 的任务上下文必须包含所有前序 Agent 的 `Deliberation Transcript`，并能看到前序 `Speech`、`Objection`、`Vote` 和 `Reservation`。

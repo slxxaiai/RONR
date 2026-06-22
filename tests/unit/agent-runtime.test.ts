@@ -276,6 +276,95 @@ describe("agent runtime", () => {
     expect(result.snapshot.actionPlan.items[0].sourceRefs).toEqual(["att-file-1", "att-link-1"]);
   });
 
+  test("uses Domain Expert domainFocus to diversify Search Intent", async () => {
+    const outputs = [
+      {
+        goal: "判断先做哪个版本",
+        constraints: [],
+        mainMotion: { title: "先做个人版", description: "缩小第一版范围" },
+        nextTask: "请领域专家发言"
+      },
+      {
+        speech: "技术复杂度支持先做个人版。",
+        claims: ["个人版架构依赖更少"],
+        assumptions: [],
+        objection: {
+          type: "risk",
+          description: "技术债需要控制。",
+          severity: "medium",
+          condition: "限定集成范围"
+        },
+        vote: {
+          position: "qualified_support",
+          reason: "技术范围可控时支持。",
+          conditions: ["限定集成范围"]
+        },
+        reservation: ""
+      },
+      {
+        speech: "市场定位也支持个人版先行。",
+        claims: ["个人用户更容易定位"],
+        assumptions: [],
+        objection: {
+          type: "alternative",
+          description: "团队版可能有更高客单价。",
+          severity: "medium",
+          condition: "验证付费意愿"
+        },
+        vote: {
+          position: "support",
+          reason: "先验证市场定位。",
+          conditions: []
+        },
+        reservation: ""
+      },
+      {
+        summary: "先做个人版并验证技术和市场假设。",
+        actionItems: [
+          {
+            title: "验证个人版",
+            rationale: "技术和市场专家均支持。",
+            conditions: ["限定集成范围", "验证付费意愿"],
+            firstValidation: "完成 5 个访谈",
+            sourceRefs: ["speech-member-technical", "speech-member-market"]
+          }
+        ]
+      }
+    ];
+    const complete = vi.fn(async () => providerResponse(outputs.shift()));
+    const search = vi.fn(async () => searchResponse());
+    const provider: ModelProvider = {
+      listModels: vi.fn(),
+      search,
+      complete
+    };
+
+    await runDeliberation(
+      {
+        userQuestion: "我应该先做个人版还是团队版？",
+        locale: "zh-CN",
+        agentConfig: {
+          chair: { model: "model-a" },
+          secretary: { model: "model-a" },
+          members: [
+            { id: "member-technical", model: "model-a", mandate: "domain-expert", domainFocus: "technical" },
+            { id: "member-market", model: "model-a", mandate: "domain-expert", domainFocus: "market" }
+          ]
+        }
+      },
+      provider
+    );
+
+    const searchQueries = search.mock.calls.map((call) => call[0].query);
+    expect(searchQueries[1]).toContain("Search Intent: member/domain-expert/technical");
+    expect(searchQueries[1]).toContain("technical feasibility");
+    expect(searchQueries[1]).toContain("architecture risk");
+    expect(searchQueries[2]).toContain("Search Intent: member/domain-expert/market");
+    expect(searchQueries[2]).toContain("market size");
+    expect(searchQueries[2]).toContain("competitive positioning");
+    expect(new Set(searchQueries).size).toBe(4);
+  });
+
   test("passes prior deliberation transcript to later speakers as known positions", async () => {
     const outputs = [
       {

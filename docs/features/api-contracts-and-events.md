@@ -27,6 +27,7 @@ RONR 的 Web 入口、Role Runtime、Provider Adapter 和 Core Domain 需要通�
 
 - 固定 P0 共享 request / response schema。
 - 固定 session event 类型和错误结构。
+- 固定 Deliberation Records 的最小读取契约，用于 History 和 Meeting Replay。
 - 让 Web 只消费 contract，不直接推断核心状态。
 - 让 contracts 可被 `apps/web`、`packages/agents`、`packages/providers` 和 `packages/core` 复用。
 
@@ -46,7 +47,10 @@ RONR 的 Web 入口、Role Runtime、Provider Adapter 和 Core Domain 需要通�
 ## Requirements
 
 - 创建会话请求必须包含用户问题和可选 Agent 配置。
+- 创建会话请求在 Web 场景必须包含 `userReferenceId` 和 `meetingRuleType`，当前 `meetingRuleType` 默认为 `robert_rules`。
 - 会话响应必须包含 session id、phase、status 和下一步任务。
+- 当请求包含 `userReferenceId` 时，stream `session_started` 和 `completed` event 应返回 `recordId`。
+- 历史记录读取必须按 `userReferenceId` 过滤。
 - session event 必须区分用户输入、Agent 输出、阶段推进、错误和完成事件。
 - 错误必须包含稳定 code、message 和可选 recovery hint。
 - Contracts 不得依赖具体 Web 组件或供应商 SDK。
@@ -72,8 +76,8 @@ RONR 的 Web 入口、Role Runtime、Provider Adapter 和 Core Domain 需要通�
 
 ## Technical Notes
 
-契约定义属于 `packages/contracts/`。流式事件 schema 仅在接入实时输出时新增；首版可先用普通 request / response 和 session event 列表。
+契约定义属于 `packages/contracts/`。流式事件 schema、`MeetingRuleType` 和记录读取 DTO 需要和 `docs/glossary.md` 的 Canonical Term 对齐。
 
 ## Rollout
 
-先定义 P0 创建会话、推进会话、读取 snapshot 和错误响应契约；后续再扩展实时事件和历史记录查询契约。
+先定义 P0 创建会话、推进会话、读取 snapshot、错误响应、stream event 和历史记录查询契约；后续再扩展用户插话事件、取消会话事件和更细的 replay contract。

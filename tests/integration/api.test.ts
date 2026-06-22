@@ -1,5 +1,16 @@
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, test, vi } from "vitest";
-import { handleListModels, handleCreateSession, handleCreateSessionStream, handleProviderConnectionTest } from "@ronr/web/server/api";
+import {
+  handleCreateSession,
+  handleCreateSessionStream,
+  handleGetRecordDetail,
+  handleListModels,
+  handleListRecords,
+  handleProviderConnectionTest
+} from "@ronr/web/server/api";
+import { createSqliteDeliberationRecordRepository } from "@ronr/db";
 
 describe("API handlers", () => {
   test("GET provider models returns mapped model list with mocked fetch", async () => {
@@ -398,6 +409,179 @@ describe("API handlers", () => {
     expect(events[13].sessionSnapshot.actionPlan.items[0].title).toBe("运行小规模验证");
     expect(JSON.stringify(events)).not.toContain("local-api-key-value");
     expect(JSON.stringify(events)).not.toContain("rawChainOfThought");
+  });
+
+  test("POST session stream persists replayable record for a local user", async () => {
+    const repository = createSqliteDeliberationRecordRepository({
+      databasePath: join(mkdtempSync(join(tmpdir(), "ronr-api-records-")), "records.sqlite")
+    });
+    const outputs = [
+      {
+        goal: "选择更适合当前约束的方案",
+        constraints: ["预算有限"],
+        mainMotion: { title: "选择 A 方案", description: "A 方案更符合预算约束" },
+        nextTask: "Member 发言"
+      },
+      {
+        speech: "A 方案对用户目标更直接。",
+        claims: ["A 更快"],
+        assumptions: ["资源可用"],
+        objection: {
+          type: "cost",
+          description: "仍需验证隐性成本",
+          severity: "medium",
+          condition: "先做小规模验证"
+        },
+        vote: {
+          position: "qualified_support",
+          reason: "有条件支持",
+          conditions: ["完成验证"]
+        },
+        reservation: "需要关注时间成本"
+      },
+      {
+        speech: "主要失败路径是供应商锁定。",
+        claims: ["存在锁定风险"],
+        assumptions: ["迁移成本较高"],
+        objection: {
+          type: "risk",
+          description: "供应商锁定风险",
+          severity: "high",
+          condition: "保留替代方案"
+        },
+        vote: {
+          position: "qualified_support",
+          reason: "风险可控时支持",
+          conditions: ["定义退出条件"]
+        },
+        reservation: "需要复盘"
+      },
+      {
+        summary: "建议先选择 A 方案并设置验证门槛。",
+        actionItems: [
+          {
+            title: "运行小规模验证",
+            rationale: "降低成本和锁定风险",
+            conditions: ["完成验证", "定义退出条件"],
+            firstValidation: "一周内比较结果",
+            sourceRefs: ["speech-member-user", "speech-member-red"]
+          }
+        ]
+      }
+    ];
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === "https://api.ppio.com/v3/web-search") {
+        return new Response(
+          JSON.stringify({
+            data: {
+              results: [
+                {
+                  title: "Decision source",
+                  url: "https://example.com/source",
+                  snippet: "外部信息摘要"
+                }
+              ]
+            }
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }
+
+      const body = JSON.parse(String(init?.body));
+      return new Response(
+        JSON.stringify({
+          id: `raw-${outputs.length}`,
+          model: body.model,
+          choices: [
+            {
+              finish_reason: "stop",
+              index: 0,
+              message: { role: "assistant", content: JSON.stringify(outputs.shift()) }
+            }
+          ],
+          usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 }
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      );
+    });
+
+    const response = await handleCreateSessionStream(
+      {
+        userQuestion: "我应该选择 A 还是 B？",
+        locale: "zh-CN",
+        userReferenceId: "user-local-test",
+        meetingRuleType: "robert_rules",
+        agentConfig: {
+          chair: { model: "model-a" },
+          secretary: { model: "model-b" },
+          members: [
+            { id: "member-user", model: "model-a", mandate: "user-advocate" },
+            { id: "member-red", model: "model-b", mandate: "red-team" }
+          ]
+        }
+      },
+      fetchMock,
+      {
+        providerProfileId: "ppio-default",
+        displayName: "PPIO",
+        protocol: "openai-compatible",
+        baseURL: "https://api.ppio.com/openai/v1",
+        apiKey: "local-api-key-value",
+        timeoutMs: 30000,
+        temperatureDefault: 0.2,
+        maxTokensDefault: 1200
+      },
+      ["model-a", "model-b"],
+      { recordRepository: repository }
+    );
+
+    const events = await readNdjsonResponse(response);
+    const startedEvent = events[0];
+    const completedEvent = events.at(-1);
+    expect(startedEvent).toMatchObject({
+      type: "session_started",
+      recordId: expect.stringMatching(/^record-/),
+      meetingRuleType: "robert_rules"
+    });
+    expect(completedEvent).toMatchObject({
+      type: "completed",
+      recordId: startedEvent.recordId
+    });
+
+    const listResponse = await handleListRecords(new URLSearchParams({ userReferenceId: "user-local-test" }), repository);
+    expect(listResponse.status).toBe(200);
+    const listPayload = await listResponse.json();
+    expect(listPayload.records).toEqual([
+      expect.objectContaining({
+        id: startedEvent.recordId,
+        userReferenceId: "user-local-test",
+        meetingRuleType: "robert_rules",
+        title: "我应该选择 A 还是 B？",
+        status: "completed",
+        eventCount: 14
+      })
+    ]);
+
+    const detailResponse = await handleGetRecordDetail(
+      String(startedEvent.recordId),
+      new URLSearchParams({ userReferenceId: "user-local-test" }),
+      repository
+    );
+    expect(detailResponse.status).toBe(200);
+    const detailPayload = await detailResponse.json();
+    expect(detailPayload.record.id).toBe(startedEvent.recordId);
+    expect(detailPayload.snapshot.actionPlan.items[0].title).toBe("运行小规模验证");
+    expect(detailPayload.events.map((event: { sequence: number }) => event.sequence)).toEqual(
+      Array.from({ length: 14 }, (_, index) => index + 1)
+    );
+    expect(detailPayload.events.at(-1).payload.type).toBe("completed");
+    await expect(
+      handleGetRecordDetail(
+        String(startedEvent.recordId),
+        new URLSearchParams({ userReferenceId: "other-local-user" }),
+        repository
+      ).then((unauthorizedResponse) => unauthorizedResponse.status)
+    ).resolves.toBe(404);
   });
 
   test("POST sessions accepts confirmed attachment summaries and returns source references", async () => {

@@ -172,6 +172,7 @@ P0 固定阶段值：
 - `model`
 - `role`
 - `mandate`
+- `domainFocus`
 - `constraints`
 - `outputSchema`
 
@@ -179,6 +180,8 @@ P0 固定阶段值：
 
 - `role` 固定为 `chair`、`secretary`、`member`。
 - `mandate` 对 Member Agent 生效，固定为 `general`、`user-advocate`、`domain-expert`、`action-planner`、`red-team`。
+- `domainFocus` 只对 `domain-expert` mandate 生效，可选值为 `technical`、`product`、`market`、`legal`、`finance`、`industry`；缺省值为 `product`。
+- 非 `domain-expert` Member 不得携带 `domainFocus`，避免脏配置进入状态模型。
 - 每个 session 必须有一个 Chair Agent、一个 Secretary Agent、至少两个 Member Agent。
 - Chair Agent 和 Secretary Agent 默认不生成普通辩论 `Speech` 和 `Vote`，除非未来 feature 明确扩展。
 - 同一模型可以实例化为多个 Agent，但每个 Agent 必须有独立 `id`、`role` 和 `mandate`。

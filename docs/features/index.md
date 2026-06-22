@@ -15,7 +15,8 @@
 | RONR Protocol Flow | 进行中 | 高 | P0 | [ronr-protocol-flow.md](ronr-protocol-flow.md) |
 | Deliberation State Model | 进行中 | 高 | P0 | [deliberation-state-model.md](deliberation-state-model.md) |
 | API Contracts and Events | 进行中 | 高 | P0 | [api-contracts-and-events.md](api-contracts-and-events.md) |
-| Session Event Log | 草稿 | 高 | P0 | [session-event-log.md](session-event-log.md) |
+| Session Event Log | 进行中 | 高 | P0 | [session-event-log.md](session-event-log.md) |
+| Deliberation Records | 进行中 | 高 | P0 | [deliberation-records.md](deliberation-records.md) |
 | Agent Role Runtime | 进行中 | 高 | P0 | [agent-role-runtime.md](agent-role-runtime.md) |
 | Prompt Template Configuration | 草稿 | 高 | P0 | [prompt-template-configuration.md](prompt-template-configuration.md) |
 | Model Provider Connection | 完成 | 高 | P0 | [model-provider-connection.md](model-provider-connection.md) |
@@ -37,15 +38,16 @@
 5. `Agent Configuration`
 6. `API Contracts and Events`
 7. `Session Event Log`
-8. `Agent Role Runtime`
-9. `Prompt Template Configuration`
-10. `Model Provider Connection`
-11. `Action Plan Trace`
-12. `Web Session Entry`
-13. `Minimal Web Deliberation View`
-14. `User Interruption`
-15. `Session Template`
-16. `Quality Review`
+8. `Deliberation Records`
+9. `Agent Role Runtime`
+10. `Prompt Template Configuration`
+11. `Model Provider Connection`
+12. `Action Plan Trace`
+13. `Web Session Entry`
+14. `Minimal Web Deliberation View`
+15. `User Interruption`
+16. `Session Template`
+17. `Quality Review`
 
 `User Input Attachments` 可与 P0 主链并行设计，但不是最小 Web 运行闭环的阻塞依赖；如果要严格控制竖切范围，可以作为 P0 optional 或 P1 early 处理。
 
@@ -60,6 +62,7 @@ flowchart TD
     AC["Agent Configuration"]
     ACE["API Contracts and Events"]
     SEL["Session Event Log"]
+    DR["Deliberation Records"]
     ARRT["Agent Role Runtime"]
     PTC["Prompt Template Configuration"]
     MPC["Model Provider Connection"]
@@ -103,8 +106,11 @@ flowchart TD
     ACE --> MWDV
     ACE --> UI
 
+    SEL --> DR
     SEL --> MWDV
     SEL --> UI
+    DR --> MWDV
+    DR --> UI
 
     ARRT --> PTC
     ARRT --> MPC

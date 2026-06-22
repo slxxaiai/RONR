@@ -3,6 +3,9 @@ import { z } from "zod";
 export const localeSchema = z.enum(["zh-CN", "zh-TW", "en", "ja", "ko"]);
 export type Locale = z.infer<typeof localeSchema>;
 
+export const meetingRuleTypeSchema = z.enum(["robert_rules"]);
+export type MeetingRuleType = z.infer<typeof meetingRuleTypeSchema>;
+
 export const mandateSchema = z.enum([
   "general",
   "user-advocate",
@@ -11,6 +14,16 @@ export const mandateSchema = z.enum([
   "red-team"
 ]);
 export type Mandate = z.infer<typeof mandateSchema>;
+
+export const domainFocusSchema = z.enum([
+  "technical",
+  "product",
+  "market",
+  "legal",
+  "finance",
+  "industry"
+]);
+export type DomainFocus = z.infer<typeof domainFocusSchema>;
 
 export const votePositionSchema = z.enum([
   "support",
@@ -44,7 +57,20 @@ export type AgentModelConfig = z.infer<typeof agentModelConfigSchema>;
 
 export const memberAgentConfigSchema = agentModelConfigSchema.extend({
   id: z.string().min(1),
-  mandate: mandateSchema
+  mandate: mandateSchema,
+  domainFocus: domainFocusSchema.optional()
+}).transform((member) => (
+  member.mandate === "domain-expert" && !member.domainFocus
+    ? { ...member, domainFocus: "product" as const }
+    : member
+)).superRefine((member, context) => {
+  if (member.mandate !== "domain-expert" && member.domainFocus) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["domainFocus"],
+      message: "domainFocus only applies to domain-expert mandate"
+    });
+  }
 });
 export type MemberAgentConfig = z.infer<typeof memberAgentConfigSchema>;
 
@@ -87,6 +113,8 @@ export type UserInputAttachment = z.infer<typeof userInputAttachmentSchema>;
 export const createSessionRequestSchema = z.object({
   userQuestion: z.string().trim().min(1),
   locale: localeSchema,
+  userReferenceId: z.string().trim().min(1).optional(),
+  meetingRuleType: meetingRuleTypeSchema.default("robert_rules"),
   agentConfig: agentConfigSchema,
   attachments: z.array(userInputAttachmentSchema).max(8).optional(),
   maxDeliberationRounds: z.number().int().positive().optional()
@@ -107,7 +135,7 @@ export function validateAgentConfig(
   const value = agentConfig as {
     chair?: { model?: unknown };
     secretary?: { model?: unknown };
-    members?: Array<{ model?: unknown; mandate?: unknown }>;
+    members?: Array<{ model?: unknown; mandate?: unknown; domainFocus?: unknown }>;
   } | undefined;
 
   const chairModel = typeof value?.chair?.model === "string" ? value.chair.model : "";
@@ -129,6 +157,12 @@ export function validateAgentConfig(
     }
     if (!mandateSchema.safeParse(member.mandate).success) {
       errors.push(`members[${index}].mandate 不受支持`);
+    }
+    if (member.domainFocus !== undefined && !domainFocusSchema.safeParse(member.domainFocus).success) {
+      errors.push(`members[${index}].domainFocus 不受支持`);
+    }
+    if (member.domainFocus !== undefined && member.mandate !== "domain-expert") {
+      errors.push(`members[${index}].domainFocus 仅支持 domain-expert mandate`);
     }
   });
   if (
@@ -247,6 +281,7 @@ export interface DeliberationSessionSnapshot {
     id: string;
     role: "chair" | "secretary" | "member";
     mandate?: Mandate;
+    domainFocus?: DomainFocus;
     model: string;
   }>;
   motions: Array<{
@@ -290,6 +325,8 @@ export interface CreateSessionResponse {
 export interface DeliberationStreamStartedEvent {
   type: "session_started";
   sessionId: string;
+  recordId?: string;
+  meetingRuleType?: MeetingRuleType;
   phase: "call_to_order";
   activeAgentId: string;
   currentSpeakerAgentId: string;
@@ -332,6 +369,8 @@ export interface DeliberationStreamSpeechEvent {
 export interface DeliberationStreamCompletedEvent {
   type: "completed";
   sessionId: string;
+  recordId?: string;
+  meetingRuleType?: MeetingRuleType;
   status: "completed";
   phase: "action_resolution";
   sessionSnapshot: DeliberationSessionSnapshot;

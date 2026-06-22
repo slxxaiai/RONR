@@ -35,8 +35,11 @@ RONR 当前已有产品文档和工程骨架，但用户还不能启动一个真
 ## Non-Goals
 
 - 多 provider 管理。
-- 登录、数据库、历史会话、SSE、附件、用户插话和持久化恢复。
+- 完整登录系统、团队权限、复杂多用户管理。
+- 用户插话和多 provider 管理。
 - 模型排行榜、自动选型或供应商计费管理。
+
+说明：数据库、历史会议和持久化恢复已由后续 `Deliberation Records` 与 `Session Event Log` feature 承接，不再作为当前产品整体的非目标。
 
 ## User Flow
 
@@ -89,8 +92,8 @@ RONR 当前已有产品文档和工程骨架，但用户还不能启动一个真
 
 ## Technical Notes
 
-首版只支持 PPIO profile。真实 API key 存在 `config/provider.local.json`，示例文件只提交占位值。`packages/providers` 负责读取配置、请求模型列表、调用 chat completions 和错误标准化；`packages/agents` 负责顺序角色调用和输出 schema 校验；`apps/web` 只通过 RONR API 触发模型调用。
+首版只支持 PPIO profile。真实 API key 存在 `config/provider.local.json`，示例文件只提交示例值。`packages/providers` 负责读取配置、请求模型列表、调用 chat completions 和错误标准化；`packages/agents` 负责顺序角色调用和输出 schema 校验；`apps/web` 只通过 RONR API 触发模型调用。
 
 ## Rollout
 
-先合并 v0 runnable slice，让团队能本地启动和试用。后续再拆分数据库、SSE、用户插话和多 provider 管理。
+先合并 v0 runnable slice，让团队能本地启动和试用。后续再拆分用户插话、多 provider 管理、云端账号系统和更完整的 E2E 验收。

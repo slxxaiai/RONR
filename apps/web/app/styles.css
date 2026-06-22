@@ -190,7 +190,6 @@ textarea:focus-visible {
   overflow: auto;
   position: absolute;
   top: 0;
-  width: clamp(300px, 22vw, 360px);
   z-index: 5;
 }
 
@@ -198,12 +197,14 @@ textarea:focus-visible {
   border-left: 0;
   border-radius: 0 calc(var(--radius) + 4px) calc(var(--radius) + 4px) 0;
   left: 0;
+  width: clamp(300px, 22vw, 360px);
 }
 
 .role-panel {
   border-radius: calc(var(--radius) + 4px) 0 0 calc(var(--radius) + 4px);
   border-right: 0;
   right: 0;
+  width: clamp(300px, 22vw, 360px);
 }
 
 .panel-section,
@@ -268,8 +269,82 @@ textarea:focus-visible {
   white-space: nowrap;
 }
 
+.topic-mode-switch {
+  background: var(--secondary);
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) - 2px);
+  display: grid;
+  gap: 4px;
+  grid-template-columns: 1fr 1fr;
+  padding: 4px;
+}
+
+.topic-mode-switch button {
+  background: transparent;
+  border: 0;
+  border-radius: calc(var(--radius) - 4px);
+  color: var(--muted-foreground);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  min-height: 30px;
+  padding: 0 8px;
+  white-space: nowrap;
+}
+
+.topic-mode-switch button:hover,
+.topic-mode-switch .topic-mode-active {
+  background: var(--card);
+  color: var(--foreground);
+  box-shadow: var(--shadow-sm);
+}
+
+.records-panel,
+.record-list {
+  display: grid;
+  gap: 10px;
+}
+
+.record-item {
+  background: var(--background);
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) - 2px);
+  color: inherit;
+  cursor: pointer;
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  text-align: left;
+  width: 100%;
+}
+
+.record-item:hover {
+  border-color: rgb(161 161 170 / 0.82);
+  box-shadow: var(--shadow-sm);
+}
+
+.record-item-active {
+  border-color: var(--ring);
+}
+
+.record-title {
+  color: var(--foreground);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.record-item p,
+.record-empty-state {
+  color: var(--muted-foreground);
+  font-size: 13px;
+  line-height: 1.45;
+  margin: 0;
+}
+
 .role-config-section {
-  gap: 12px;
+  gap: 0;
 }
 
 .setup-panel h2,
@@ -324,19 +399,75 @@ textarea::placeholder {
 .member-config {
   border-top: 1px solid var(--border);
   display: grid;
-  gap: 10px;
-  padding-top: 10px;
+  gap: 8px;
+  padding: 10px 0;
 }
 
+.fixed-agent-fields,
 .member-fields {
+  align-items: center;
   display: grid;
-  gap: 10px;
+  gap: 6px;
+  grid-template-columns: minmax(82px, 1fr) minmax(104px, 116px) minmax(34px, auto);
+  min-width: 0;
+  width: 100%;
+}
+
+.fixed-agent-fields {
+  grid-template-columns: minmax(82px, 1fr) minmax(104px, 116px);
+}
+
+.member-fields-with-focus {
+  align-items: stretch;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.member-fields-config-row {
+  align-items: center;
+  display: grid;
+  gap: 6px;
+  grid-template-columns: minmax(82px, 1fr) minmax(104px, 116px) minmax(34px, auto);
+  min-width: 0;
+  width: 100%;
+}
+
+.member-fields-focus-row {
+  grid-template-columns: minmax(96px, 116px) minmax(104px, 116px) minmax(34px, auto);
+}
+
+.member-role-label {
+  align-self: center;
+  color: var(--foreground);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.25;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fixed-agent-fields label,
+.member-fields label {
+  min-width: 0;
+}
+
+.fixed-agent-fields label span,
+.member-fields label span {
+  block-size: 1px;
+  clip: rect(0 0 0 0);
+  inline-size: 1px;
+  overflow: hidden;
+  position: absolute;
+  white-space: nowrap;
 }
 
 .member-remove-action {
-  justify-self: end;
   min-height: 30px;
-  padding: 0 8px;
+  min-width: 34px;
+  overflow: hidden;
+  padding: 0 2px;
+  text-overflow: clip;
 }
 
 .main-panel {
@@ -596,6 +727,105 @@ textarea::placeholder {
   min-height: 0;
   overflow: visible;
   padding: 0;
+}
+
+.replay-summary {
+  background: rgb(255 255 255 / 0.78);
+  border: 1px solid rgb(228 228 231 / 0.92);
+  border-radius: calc(var(--radius) + 2px);
+  box-shadow: var(--shadow-sm);
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+}
+
+.replay-summary h3 {
+  color: var(--foreground);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.25;
+  margin: 2px 0 0;
+}
+
+.replay-summary p {
+  color: var(--muted-foreground);
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.replay-summary-header {
+  align-items: flex-start;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.replay-eyebrow,
+.replay-status,
+.replay-speaker-meta {
+  color: var(--muted-foreground);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.replay-status {
+  background: var(--secondary);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px 8px;
+  white-space: nowrap;
+}
+
+.replay-speaker-block {
+  border-top: 1px solid var(--border);
+  display: grid;
+  gap: 8px;
+  padding-top: 10px;
+}
+
+.replay-speaker-block > strong {
+  color: var(--foreground);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.replay-speaker-list {
+  display: grid;
+  gap: 6px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.replay-speaker-item {
+  align-items: center;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 24px minmax(96px, auto) minmax(0, 1fr);
+}
+
+.replay-speaker-index {
+  align-items: center;
+  background: var(--secondary);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted-foreground);
+  display: inline-flex;
+  font-size: 11px;
+  font-weight: 600;
+  height: 24px;
+  justify-content: center;
+  width: 24px;
+}
+
+.replay-speaker-agent {
+  color: var(--foreground);
+  font-size: 13px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .chat-thread {
@@ -1066,6 +1296,13 @@ textarea::placeholder {
   .topic-panel,
   .role-panel {
     background: rgb(255 255 255 / 0.88);
+  }
+
+  .topic-panel {
+    width: 300px;
+  }
+
+  .role-panel {
     width: 300px;
   }
 

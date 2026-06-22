@@ -132,34 +132,52 @@ describe("RONR web app", () => {
 
     await waitFor(() => expect(screen.getByText("2 个模型已加载")).toBeInTheDocument());
     expect(screen.queryByLabelText("删除 1")).not.toBeInTheDocument();
+    expect(screen.queryByText("用户代表")).not.toBeInTheDocument();
+    expect(document.querySelector(".fixed-role-label")).not.toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "领域专家 1 模型" })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "领域专家 1 领域焦点" })).toHaveValue("product");
+    expect(screen.getByRole("combobox", { name: "普通议员 1 模型" })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "普通议员 2 模型" })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "红队议员 1 模型" })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "红队议员 2 模型" })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "添加议员" }));
-    expect(screen.getByRole("combobox", { name: "议员 3 模型" })).toBeInTheDocument();
-    fireEvent.change(screen.getByRole("combobox", { name: "议员 3 模型" }), { target: { value: "model-b" } });
+    expect(screen.getByRole("combobox", { name: "新角色 1 模型" })).toBeInTheDocument();
+    fireEvent.change(screen.getByRole("combobox", { name: "新角色 1 模型" }), { target: { value: "model-b" } });
     const mandateSelects = screen.getAllByRole("combobox", { name: "职责授权" });
-    fireEvent.change(mandateSelects[2], { target: { value: "domain-expert" } });
+    fireEvent.change(mandateSelects[0], { target: { value: "domain-expert" } });
+    expect(screen.getByRole("combobox", { name: "新角色 1 领域焦点" })).toHaveValue("product");
+    fireEvent.change(screen.getByRole("combobox", { name: "新角色 1 领域焦点" }), { target: { value: "technical" } });
 
-    fireEvent.click(screen.getByRole("button", { name: "删除 2" }));
-    expect(screen.queryByRole("combobox", { name: "议员 3 模型" })).not.toBeInTheDocument();
-    expect(screen.getByRole("combobox", { name: "议员 2 模型" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "删除 普通议员 2" }));
+    expect(screen.queryByRole("combobox", { name: "普通议员 2 模型" })).not.toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "红队议员 2 模型" })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "添加议员" }));
-    fireEvent.change(screen.getByRole("combobox", { name: "议员 3 模型" }), { target: { value: "model-b" } });
-    fireEvent.change(screen.getAllByRole("combobox", { name: "职责授权" })[2], { target: { value: "action-planner" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "新角色 2 模型" }), { target: { value: "model-b" } });
+    fireEvent.change(screen.getAllByRole("combobox", { name: "职责授权" })[0], { target: { value: "action-planner" } });
+    expect(screen.queryByRole("combobox", { name: "新角色 2 领域焦点" })).not.toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("最大讨论轮次"), { target: { value: "3" } });
     fireEvent.change(screen.getByLabelText("个人决策问题"), {
       target: { value: "我应该现在买房吗？" }
     });
     fireEvent.click(screen.getByRole("button", { name: "启动议事" }));
 
-    await waitFor(() => expect(screen.getByText("The personal version has a clearer first user.")).toBeInTheDocument());
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.some(([input]) => input.toString() === "/api/sessions/stream")).toBe(true);
+    });
     const sessionCall = fetchMock.mock.calls.find(([input]) => input.toString() === "/api/sessions/stream");
     expect(sessionCall).toBeDefined();
     const requestBody = JSON.parse(String(sessionCall?.[1]?.body));
+    expect(requestBody.userReferenceId).toMatch(/^local-anonymous-/);
+    expect(requestBody.meetingRuleType).toBe("robert_rules");
     expect(requestBody.maxDeliberationRounds).toBe(3);
     expect(requestBody.agentConfig.members).toEqual([
-      { id: "member-user", model: "model-a", mandate: "user-advocate" },
-      { id: "member-1", model: "model-b", mandate: "domain-expert" },
+      { id: "member-domain-product", model: "model-a", mandate: "domain-expert", domainFocus: "product" },
+      { id: "member-general-1", model: "model-a", mandate: "general" },
+      { id: "member-red-1", model: "model-a", mandate: "red-team" },
+      { id: "member-red-2", model: "model-a", mandate: "red-team" },
+      { id: "member-1", model: "model-b", mandate: "domain-expert", domainFocus: "technical" },
       { id: "member-2", model: "model-b", mandate: "action-planner" }
     ]);
   });
@@ -279,6 +297,202 @@ describe("RONR web app", () => {
     expect(screen.queryByRole("region", { name: "来源引用" })).not.toBeInTheDocument();
   });
 
+  test("shows new meeting and history entries linked to the local user reference", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = input.toString();
+      if (url === "/api/providers/ppio/models") {
+        return new Response(
+          JSON.stringify({
+            models: [
+              {
+                id: "model-a",
+                title: "Model A",
+                description: "A",
+                contextSize: 32000,
+                inputTokenPricePerM: 1,
+                outputTokenPricePerM: 2
+              }
+            ]
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }
+      if (url.startsWith("/api/records?")) {
+        const parsedUrl = new URL(url, "http://localhost");
+        expect(parsedUrl.searchParams.get("userReferenceId")).toMatch(/^local-anonymous-/);
+        return new Response(
+          JSON.stringify({
+            records: [
+              {
+                id: "record-history-1",
+                userReferenceId: parsedUrl.searchParams.get("userReferenceId"),
+                sessionId: "session-history-1",
+                meetingRuleType: "robert_rules",
+                title: "历史议事记录",
+                question: "我应该先做个人版还是团队版？",
+                locale: "zh-CN",
+                status: "completed",
+                phase: "action_resolution",
+                actionPlanSummary: "The personal version has a clearer first user.",
+                eventCount: 5,
+                createdAt: "2026-06-20T00:00:00.000Z",
+                updatedAt: "2026-06-20T00:01:00.000Z",
+                completedAt: "2026-06-20T00:01:00.000Z"
+              }
+            ]
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }
+      if (url.startsWith("/api/records/record-history-1?")) {
+        return new Response(
+          JSON.stringify({
+            record: {
+              id: "record-history-1",
+              userReferenceId: "local-anonymous-test",
+              sessionId: "session-history-1",
+              meetingRuleType: "robert_rules",
+              title: "历史议事记录",
+              question: "我应该先做个人版还是团队版？",
+              locale: "zh-CN",
+              status: "completed",
+              phase: "action_resolution",
+              actionPlanSummary: "The personal version has a clearer first user.",
+              eventCount: 5,
+              createdAt: "2026-06-20T00:00:00.000Z",
+              updatedAt: "2026-06-20T00:01:00.000Z",
+              completedAt: "2026-06-20T00:01:00.000Z"
+            },
+            snapshot: sessionSnapshot,
+            events: [
+              {
+                id: "event-1",
+                recordId: "record-history-1",
+                sessionId: "session-history-1",
+                userReferenceId: "local-anonymous-test",
+                sequence: 1,
+                type: "session_started",
+                payload: { type: "session_started", sessionId: "session-history-1", phase: "call_to_order" },
+                createdAt: "2026-06-20T00:00:00.000Z"
+              },
+              {
+                id: "event-2",
+                recordId: "record-history-1",
+                sessionId: "session-history-1",
+                userReferenceId: "local-anonymous-test",
+                sequence: 2,
+                type: "speech",
+                payload: {
+                  type: "speech",
+                  speech: {
+                    id: "speech-history-chair",
+                    agentId: "chair",
+                    role: "chair",
+                    phase: "call_to_order",
+                    content: "主席确认议题和约束。",
+                    claims: [],
+                    assumptions: []
+                  }
+                },
+                createdAt: "2026-06-20T00:00:20.000Z"
+              },
+              {
+                id: "event-3",
+                recordId: "record-history-1",
+                sessionId: "session-history-1",
+                userReferenceId: "local-anonymous-test",
+                sequence: 3,
+                type: "speech",
+                payload: {
+                  type: "speech",
+                  speech: {
+                    id: "speech-history-member-user",
+                    agentId: "member-user",
+                    role: "member",
+                    mandate: "user-advocate",
+                    phase: "opening_statements",
+                    content: "用户代表说明个人版更容易找到第一批用户。",
+                    claims: [],
+                    assumptions: []
+                  }
+                },
+                createdAt: "2026-06-20T00:00:40.000Z"
+              },
+              {
+                id: "event-4",
+                recordId: "record-history-1",
+                sessionId: "session-history-1",
+                userReferenceId: "local-anonymous-test",
+                sequence: 4,
+                type: "speech",
+                payload: {
+                  type: "speech",
+                  speech: {
+                    id: "speech-history-member-red",
+                    agentId: "member-red",
+                    role: "member",
+                    mandate: "red-team",
+                    phase: "opening_statements",
+                    content: "红队议员指出团队版需求可能被低估。",
+                    claims: [],
+                    assumptions: []
+                  }
+                },
+                createdAt: "2026-06-20T00:00:50.000Z"
+              },
+              {
+                id: "event-5",
+                recordId: "record-history-1",
+                sessionId: "session-history-1",
+                userReferenceId: "local-anonymous-test",
+                sequence: 5,
+                type: "completed",
+                payload: { type: "completed", sessionId: "session-history-1", phase: "action_resolution", sessionSnapshot },
+                createdAt: "2026-06-20T00:01:00.000Z"
+              }
+            ]
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }
+
+      return new Response(JSON.stringify({}), { status: 500, headers: { "Content-Type": "application/json" } });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { container } = render(<HomePage />);
+
+    await waitFor(() => expect(screen.getByText("1 个模型已加载")).toBeInTheDocument());
+    expect(screen.getByRole("button", { name: "新建会议" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "历史会议" }));
+
+    await waitFor(() => expect(screen.getByText("历史议事记录")).toBeInTheDocument());
+    expect(screen.getByText("罗伯特议事规则")).toBeInTheDocument();
+    expect(screen.getByText("5 个事件")).toBeInTheDocument();
+    expect(window.localStorage.getItem("ronr.userReferenceId")).toMatch(/^local-anonymous-/);
+
+    fireEvent.click(screen.getByText("The personal version has a clearer first user."));
+
+    await waitFor(() => expect(screen.getByText("The personal version has a clearer first user.")).toBeInTheDocument());
+    expect(screen.getByText("历史会议")).toBeInTheDocument();
+    expect(screen.getByText("历史记录已打开")).toBeInTheDocument();
+    expect(screen.getByText("发言顺序")).toBeInTheDocument();
+    const speakerItems = container.querySelectorAll(".replay-speaker-item");
+    expect(speakerItems).toHaveLength(3);
+    expect(speakerItems[0]).toHaveTextContent("1");
+    expect(speakerItems[0]).toHaveTextContent("chair");
+    expect(speakerItems[1]).toHaveTextContent("2");
+    expect(speakerItems[1]).toHaveTextContent("member-user");
+    expect(speakerItems[2]).toHaveTextContent("3");
+    expect(speakerItems[2]).toHaveTextContent("member-red");
+    expect(screen.getByText("主席确认议题和约束。")).toBeInTheDocument();
+    expect(screen.getByText("用户代表说明个人版更容易找到第一批用户。")).toBeInTheDocument();
+    expect(screen.getByText("红队议员指出团队版需求可能被低估。")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "新建会议" }));
+    expect(screen.getByLabelText("个人决策问题")).toHaveValue("");
+  });
+
   test("blocks session start when an attachment summary is cleared", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = input.toString();
@@ -357,7 +571,19 @@ describe("RONR web app", () => {
     expect(container.querySelector(".chat-thread")).toBeInTheDocument();
     expect(container.querySelector(".panel-collapse-action")).toBeInTheDocument();
     expect(container.querySelector(".panel-section-inline")).toBeInTheDocument();
+    expect(container.querySelector(".fixed-agent-fields")).toBeInTheDocument();
     expect(container.querySelector(".member-fields")).toBeInTheDocument();
+    expect(container.querySelector(".fixed-agent-fields")?.firstElementChild).toHaveClass("member-role-label");
+    const domainExpertFields = container.querySelector(".member-fields-with-focus");
+    expect(domainExpertFields?.firstElementChild).toHaveClass("member-role-label");
+    expect(domainExpertFields?.children[1]).toHaveClass("member-fields-config-row", "member-fields-focus-row");
+    expect(domainExpertFields?.children[1]?.children[0].tagName).toBe("LABEL");
+    expect(domainExpertFields?.children[1]?.children[1].tagName).toBe("LABEL");
+    expect(domainExpertFields?.children[1]?.children[2]).toHaveClass("member-remove-action");
+    const generalMemberFields = container.querySelector(".member-fields:not(.member-fields-with-focus)");
+    expect(generalMemberFields?.firstElementChild).toHaveClass("member-role-label");
+    expect(generalMemberFields?.children[1].tagName).toBe("LABEL");
+    expect(generalMemberFields?.children[2]).toHaveClass("member-remove-action");
     await waitFor(() => expect(container.querySelector(".status-pill.status-ok")).toHaveTextContent("1 个模型已加载"));
 
     fireEvent.click(screen.getByRole("button", { name: "隐藏话题区" }));
@@ -380,7 +606,16 @@ describe("RONR web app", () => {
     expect(css).toContain(".meeting-status-bar");
     expect(css).toContain(".chat-bubble");
     expect(css).toContain(".panel-collapse-action");
+    expect(css).toContain(".fixed-agent-fields");
     expect(css).toContain(".member-fields");
+    expect(css).toContain(".member-fields-config-row");
+    expect(css).toContain(".member-fields-focus-row");
+    expect(css).toContain(".member-role-label");
+    expect(css).toContain("width: clamp(300px, 22vw, 360px)");
+    expect(css).toContain("width: 100%");
+    expect(css).toContain("grid-template-columns: minmax(82px, 1fr) minmax(104px, 116px) minmax(34px, auto)");
+    expect(css).toContain("grid-template-columns: minmax(96px, 116px) minmax(104px, 116px) minmax(34px, auto)");
+    expect(css).toContain("grid-template-columns: minmax(82px, 1fr) minmax(104px, 116px)");
     expect(css).not.toContain(".meeting-table");
     expect(css).not.toContain(".agent-ring");
     expect(css).not.toContain("#1c7c54");
@@ -449,7 +684,10 @@ describe("RONR web app", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "启动议事" }));
 
-    await waitFor(() => expect(screen.getByText("The personal version has a clearer first user.")).toBeInTheDocument());
+    await waitFor(() => {
+      const speech = container.querySelector("[data-turn-id='member-user-opening_statements'] .speech-content");
+      expect(speech).toHaveTextContent("The personal version");
+    });
     expect(statusBar).toHaveTextContent("行动清单");
     expect(statusBar).toHaveTextContent("member-user");
     expect(statusBar).toHaveTextContent("已完成");
@@ -786,7 +1024,11 @@ describe("RONR web app", () => {
     fireEvent.click(screen.getByRole("button", { name: "启动议事" }));
 
     await waitFor(
-      () => expect(screen.getByText("综上，我反对在当前价位无条件下单买入，建议投资者至少等待回调至190美元以下或下一季度财报验证营收增速后再做决策。")).toBeInTheDocument(),
+      () => {
+        const paragraphs = container.querySelectorAll("[data-turn-id='member-red-opening_statements'] .speech-content p");
+        expect(paragraphs).toHaveLength(5);
+        expect(paragraphs[4]).toHaveTextContent("综上，我反对");
+      },
       { timeout: 4000 }
     );
     const speechParagraphs = container.querySelectorAll("[data-turn-id='member-red-opening_statements'] .speech-content p");
@@ -886,8 +1128,13 @@ describe("RONR web app", () => {
     expect(document.title).toBe("RONR AI Deliberation");
     expect(screen.getByText("Provider Configuration")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Role Configuration Panel" })).toBeInTheDocument();
-    expect(screen.getAllByText("User Advocate").length).toBeGreaterThanOrEqual(2);
-    expect(screen.getAllByText("Red Team Member").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByRole("combobox", { name: "Domain Expert 1 Model" })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "General Member 1 Model" })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "General Member 2 Model" })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Red Team Member 1 Model" })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Red Team Member 2 Model" })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Domain Expert 1 Domain Focus" })).toHaveValue("product");
+    expect(screen.queryByText("User Advocate")).not.toBeInTheDocument();
     expect(screen.getByText("Topic Panel")).toBeInTheDocument();
     expect(screen.getByText("Meeting Area")).toBeInTheDocument();
     expect(screen.getByText("Role Configuration Panel")).toBeInTheDocument();

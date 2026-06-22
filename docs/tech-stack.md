@@ -24,7 +24,7 @@ Web > App > CLI
 - `SSE`：首个原型可先用普通请求返回完整结果；需要流式展示会议进度和 Agent 发言时再接入。
 - `Tailwind CSS + shadcn/ui`：等 Web UI 进入可复用组件阶段再引入；早期可先用 CSS Modules、少量全局 CSS 或框架内置能力。
 - `Playwright`：等 Web 关键路径稳定后再接入 E2E。
-- `Drizzle + Postgres`：等需要会话恢复、历史记录或多次运行对比时再接入；早期优先使用内存、fixture 或轻量文件存储。
+- `Drizzle + Postgres`：当前不引入；本地会议记录先使用 SQLite + Record Repository，等云端多用户、复杂查询或 migration 压力出现后再评估。
 - `Expo / React Native`：手机 App 阶段再引入。
 - `Tauri`：桌面 App 阶段再引入。
 - `CLI`：只作为开发、调试和自动化入口，不作为首个产品主入口。
@@ -95,9 +95,10 @@ packages/agents/
 packages/agents/prompts/
 packages/providers/
 packages/contracts/
+packages/db/
 ```
 
-等持久化方案落地后再加入 `packages/db/`；等跨端复用明确后再加入 `packages/ui/`、`apps/mobile/` 和 `apps/desktop/`。在这些触发条件出现前，不创建空目录，也不提前安装相关依赖。
+等跨端复用明确后再加入 `packages/ui/`、`apps/mobile/` 和 `apps/desktop/`。在这些触发条件出现前，不创建空目录，也不提前安装相关依赖。
 
 新增目录时需要同步更新 `README.md`。
 
@@ -220,9 +221,10 @@ packages/agents/prompts/
 - Session repository。
 - Event log repository。
 - Snapshot repository。
-- migration 管理。
+- SQLite adapter。
+- 后续 Postgres adapter 的接口边界。
 
-该模块应在 Web MVP 进入会话恢复、历史记录和多次运行对比时接入。具体数据库和 ORM 不在首版固定。
+当前本地会议记录已经接入 `packages/db/`，采用 SQLite 作为本地 adapter。Web API 只依赖 Record Repository，不直接依赖 SQLite SQL。ORM 不在当前阶段固定；只有在 schema migration、复杂查询或云端部署需要类型安全迁移时再评估 Drizzle。
 
 ## 5. Runtime and API Strategy
 
@@ -249,18 +251,18 @@ Web UI 只消费事件和 session snapshot，不直接推断核心状态。
 
 ## 6. Persistence Strategy
 
-首版可以分两步：
+当前阶段已经进入本地持久化：
 
-1. `Phase 1`：内存存储或 fixture，先跑通核心状态机、Agent Runtime 和 Web 议事体验。
-2. `Phase 2`：接入持久化存储，保存 event log 和 session snapshot。
+1. `Local Phase`：SQLite 保存 Deliberation Record、Session Event Log 和 Session Snapshot。
+2. `Cloud Phase`：需要云端多用户、跨设备同步、复杂历史查询或运维备份时，再迁移到 Postgres。
 
 事件日志优先于只保存最终结果，因为 RONR 的价值来自可追溯过程。
 
 持久化选型原则：
 
-- 默认从最轻方案开始：内存、fixture 或本地文件。
-- 需要本地可恢复会话时，优先评估 SQLite。
-- 需要服务端多用户、部署和历史查询时，再评估 Postgres。
+- 本地运行优先 SQLite，避免为了单机历史记录提前承担 Postgres 运维成本。
+- API 和业务层依赖 Record Repository，不依赖具体数据库。
+- 需要服务端多用户、部署、复杂历史查询、备份和权限隔离时，再评估 Postgres。
 - 需要类型安全 migration 和复杂查询时，再评估 ORM，例如 Drizzle。
 
 ## 7. Testing Strategy
@@ -362,7 +364,7 @@ Web UI 只消费事件和 session snapshot，不直接推断核心状态。
 4. 建立 `packages/agents` 的 `RoleDefinition`、`RoleRunner` 和 mock provider。
 5. 在 Web 里实现创建会话、阶段进度和 Agent 发言展示。
 6. 接入真实 OpenAI-compatible `ModelProvider` adapter，先使用 PPIO preset 验证。
-7. 当需要恢复会话或查看历史时，接入持久化 event log 和 session snapshot。
+7. 使用 SQLite + Record Repository 保存本地 Deliberation Records、event log 和 session snapshot。
 8. 当 Web 关键路径稳定后，增加 E2E 覆盖完整议事闭环。
 
 ## 10. Decisions
@@ -374,7 +376,7 @@ Web UI 只消费事件和 session snapshot，不直接推断核心状态。
 - 测试框架：`Vitest`；E2E 按需后置。
 - Schema 校验：`Zod`。
 - 实时输出：普通请求优先；需要流式体验时使用 `SSE`。
-- 持久化：内存、fixture 或本地文件优先；SQLite、Postgres、ORM 按阶段评估。
+- 持久化：当前本地阶段使用 SQLite + Record Repository；云端多用户和复杂查询阶段再评估 Postgres / Drizzle。
 - 手机 App：后续再评估 `Expo / React Native`。
 - 桌面 App：后续再评估 `Tauri` 或 PWA。
 - CLI：后续内部调试入口。

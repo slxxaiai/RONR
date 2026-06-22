@@ -4,6 +4,7 @@ import type {
   CreateSessionRequest,
   DeliberationStreamEvent,
   DeliberationSessionSnapshot,
+  DomainFocus,
   Locale,
   Mandate,
   ProviderCallMeta,
@@ -143,6 +144,7 @@ type DeliberationTranscriptEntry = {
   agentId: string;
   role: "chair" | "secretary" | "member";
   mandate?: Mandate;
+  domainFocus?: DomainFocus;
   phase: string;
   speech: string;
   claims: string[];
@@ -197,6 +199,7 @@ export async function runDeliberation(
         request.userQuestion,
         request.locale,
         member.mandate,
+        member.domainFocus,
         chair.mainMotion.description,
         transcriptEntries
       ),
@@ -383,6 +386,7 @@ export async function* runDeliberationStream(
         request.userQuestion,
         request.locale,
         member.mandate,
+        member.domainFocus,
         chair.mainMotion.description,
         transcriptEntries
       ),
@@ -675,13 +679,16 @@ function buildSearchIntentQuery(input: {
   prompt: string;
 }): string {
   const mandate = extractPromptValue(input.prompt, "Mandate");
+  const domainFocus = extractPromptValue(input.prompt, "Domain Focus") as DomainFocus | undefined;
   const motion = extractPromptValue(input.prompt, "Motion");
   const goal = extractPromptValue(input.prompt, "Goal");
   const transcriptSummary = summarizePromptTranscript(input.prompt);
-  const intent = input.role === "member" && mandate
+  const intent = input.role === "member" && mandate === "domain-expert" && domainFocus
+    ? `member/${mandate}/${domainFocus}`
+    : input.role === "member" && mandate
     ? `member/${mandate}`
     : input.role;
-  const angle = searchAngleFor(input.role, mandate);
+  const angle = searchAngleFor(input.role, mandate, domainFocus);
   return [
     `Search Intent: ${intent}`,
     `Question: ${input.userQuestion}`,
@@ -714,16 +721,26 @@ function summarizePromptTranscript(prompt: string): string | undefined {
   return transcript.length > 360 ? `${transcript.slice(0, 357)}...` : transcript || undefined;
 }
 
-function searchAngleFor(role: "chair" | "secretary" | "member", mandate?: string): string {
+function searchAngleFor(role: "chair" | "secretary" | "member", mandate?: string, domainFocus?: DomainFocus): string {
   if (role === "chair") {
     return "topic framing, decision background, user constraints, key definitions";
   }
   if (role === "secretary") {
     return "action plan validation, evidence check, unresolved risks, next-step feasibility";
   }
+  if (mandate === "domain-expert") {
+    const domainAngles: Record<DomainFocus, string> = {
+      technical: "technical feasibility, complexity, architecture risk, delivery cost",
+      product: "product demand, user journey, feature priority, experience risk",
+      market: "market size, competition, acquisition channel, pricing, competitive positioning",
+      legal: "regulation, contract risk, privacy, intellectual property, compliance constraints",
+      finance: "budget, cash flow, ROI, unit economics, cost structure",
+      industry: "industry facts, scenario constraints, business model norms, adoption patterns"
+    };
+    return domainAngles[domainFocus ?? "product"];
+  }
   const memberAngles: Record<string, string> = {
     "user-advocate": "user needs, user pain points, adoption preference, scenario evidence",
-    "domain-expert": "domain facts, market data, policy constraints, technical feasibility",
     "red-team": "failure cases, counterexamples, hidden costs, downside risks",
     general: "balanced pros and cons, comparable options, decision criteria",
     "action-planner": "implementation steps, validation methods, timeline, resource cost"
@@ -800,7 +817,7 @@ function buildChairTranscriptEntry(
 }
 
 function buildMemberTranscriptEntry(
-  member: { id: string; mandate: Mandate },
+  member: { id: string; mandate: Mandate; domainFocus?: DomainFocus },
   output: MemberOutput,
   searchContext: SearchContext
 ): DeliberationTranscriptEntry {
@@ -809,6 +826,7 @@ function buildMemberTranscriptEntry(
     agentId: member.id,
     role: "member",
     mandate: member.mandate,
+    ...(member.domainFocus ? { domainFocus: member.domainFocus } : {}),
     phase: "opening_statements",
     speech: output.speech,
     claims: output.claims,
@@ -833,7 +851,7 @@ function formatDeliberationTranscript(entries: DeliberationTranscriptEntry[]): s
   }
 
   for (const entry of entries) {
-    lines.push(`- ${entry.speechId} | ${entry.role}${entry.mandate ? `/${entry.mandate}` : ""} | ${entry.agentId} | ${entry.phase}: ${entry.speech}`);
+    lines.push(`- ${entry.speechId} | ${entry.role}${entry.mandate ? `/${entry.mandate}` : ""}${entry.domainFocus ? `/${entry.domainFocus}` : ""} | ${entry.agentId} | ${entry.phase}: ${entry.speech}`);
     if (entry.claims.length > 0) {
       lines.push(`  claims: ${entry.claims.join("；")}`);
     }
@@ -958,6 +976,7 @@ function buildAgents(agentConfig: AgentConfig): DeliberationSessionSnapshot["age
       id: member.id,
       role: "member" as const,
       mandate: member.mandate,
+      ...(member.domainFocus ? { domainFocus: member.domainFocus } : {}),
       model: member.model
     }))
   ];
@@ -1011,19 +1030,28 @@ function buildMemberPrompt(
   userQuestion: string,
   locale: Locale,
   mandate: Mandate,
+  domainFocus: DomainFocus | undefined,
   motionDescription: string,
   transcriptEntries: DeliberationTranscriptEntry[]
 ): string {
+  const resolvedDomainFocus = mandate === "domain-expert" ? domainFocus ?? "product" : undefined;
   return [
     `Locale: ${locale}`,
     `Output language: use ${locale} for every user-visible JSON string value.`,
     `Mandate: ${mandate}`,
+    resolvedDomainFocus ? `Domain Focus: ${resolvedDomainFocus}` : undefined,
     `User question: ${userQuestion}`,
     `Motion: ${motionDescription}`,
     formatDeliberationTranscript(transcriptEntries),
+    resolvedDomainFocus ? [
+      "Domain Expert Requirements:",
+      "- Use the Search Result Summary before expressing a position.",
+      "- Cover domain facts, key constraints, applicability conditions, evidence sources, and impact on the motion.",
+      "- Do not give generic advice; explain how this domain focus changes the current decision."
+    ].join("\n") : undefined,
     "请作为 Member Agent 输出 JSON：",
     "{\"speech\":\"...\",\"claims\":[\"...\"],\"assumptions\":[\"...\"],\"objection\":{\"type\":\"risk\",\"description\":\"...\",\"severity\":\"medium\",\"condition\":\"...\"},\"vote\":{\"position\":\"qualified_support\",\"reason\":\"...\",\"conditions\":[\"...\"]},\"reservation\":\"...\"}"
-  ].join("\n");
+  ].filter(Boolean).join("\n");
 }
 
 function buildSecretaryPrompt(

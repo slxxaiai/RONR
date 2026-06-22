@@ -20,6 +20,8 @@
 | Deliberation Session | 议事会话 | 議事會話 | 熟議セッション | 숙의 세션 | A complete discussion around one user question. |
 | Deliberation State Model | 议事状态模型 | 議事狀態模型 | 熟議状態モデル | 숙의 상태 모델 | State relationship among session, stage, agents, motions, speeches, objections, votes, reservations, and action plan. |
 | Session Snapshot | 会话快照 | 會話快照 | セッションスナップショット | 세션 스냅샷 | Validated current state of a Deliberation Session. |
+| Deliberation Record | 议事记录 | 議事記錄 | 熟議記録 | 숙의 기록 | Persisted history entry for one Deliberation Session, including rule type, event log, snapshot, and timestamps. |
+| Deliberation Records | 议事记录列表 | 議事記錄列表 | 熟議記録一覧 | 숙의 기록 목록 | History collection shown in the Topic Panel for the current User Reference. |
 | Session Status | 会话状态 | 會話狀態 | セッション状態 | 세션 상태 | Lifecycle enum for a Deliberation Session. |
 | Session Locale | 会话语言区域 | 會話語言地區 | セッションロケール | 세션 로케일 | Locale used for user-visible session output. |
 | Deliberation Space | 议事空间 | 議事空間 | 熟議スペース | 숙의 공간 | Persistent or configured space for sessions and agents. |
@@ -39,6 +41,8 @@
 | Focus Ring | 焦点环 | 焦點環 | フォーカスリング | 포커스 링 | Visible outline or shadow that indicates keyboard focus. |
 | Web Session Entry | Web 会话入口 | Web 會話入口 | Web セッション入口 | Web 세션 진입점 | Web entry point for creating a Deliberation Session. |
 | User Input Attachments | 用户输入附件 | 使用者輸入附件 | ユーザー入力添付 | 사용자 입력 첨부 | Web input capability for adding text, files, or links to a Deliberation Session. |
+| New Meeting | 新建会议 | 新建會議 | 新規会議 | 새 회의 | Topic Panel mode for creating a new Deliberation Session. |
+| History | 历史会议 | 歷史會議 | 履歴会議 | 기록 회의 | Topic Panel mode for listing prior Deliberation Records. |
 | Text Input | 文字输入 | 文字輸入 | テキスト入力 | 텍스트 입력 | User-provided text question or context in the Web entry. |
 | File Input | 文件输入 | 檔案輸入 | ファイル入力 | 파일 입력 | User-provided file that must be normalized into a source-tracked context summary. |
 | Link Input | 链接输入 | 連結輸入 | リンク入力 | 링크 입력 | User-provided URL that must be normalized into a source-tracked context summary. |
@@ -54,6 +58,8 @@
 | Agent Turn Message | Agent 回合消息 | Agent 回合訊息 | Agent ターンメッセージ | Agent 턴 메시지 | One Chat Message that combines a single Agent turn's Search Source Citation, Thinking Summary, and Speech instead of splitting them into separate messages. |
 | Collapsed Detail | 折叠详情 | 摺疊詳情 | 折りたたみ詳細 | 접힌 상세 | Default-collapsed expandable area inside an Agent Turn Message for Search Source Citation or Thinking Summary. |
 | Meeting Output | 会议输出 | 會議輸出 | 会議出力 | 회의 출력 | Output container inside the Meeting Area. |
+| Meeting Replay | 会议重放 | 會議重放 | 会議再生 | 회의 재생 | Replaying a saved Deliberation Record from ordered Session Events and Session Snapshot. |
+| Speaker Order | 发言顺序 | 發言順序 | 発言順 | 발언 순서 | Ordered speaker list derived from Session Event `sequence` for Meeting Replay. |
 | Meeting Status Bar | 会议进度状态栏 | 會議進度狀態列 | 会議進行ステータスバー | 회의 진행 상태 표시줄 | Muted status row in the Meeting Area header that shows current Stage, active Agent, Current Speaker, and session progress state. |
 | Streaming Meeting Output | 流式会议输出 | 流式會議輸出 | ストリーミング会議出力 | 스트리밍 회의 출력 | Meeting Output mode that appends safe events as they arrive, including Search Source Citation, Thinking Summary, Speech, and completion. |
 | Typewriter Streaming | 逐字流式输出 | 逐字流式輸出 | タイプライター式ストリーミング | 타자식 스트리밍 | UI rendering mode that reveals generated Speech progressively character by character instead of inserting the full content at once. |
@@ -77,6 +83,13 @@
 | General Member | 普通议员 | 普通議員 | 一般議員 | 일반 의원 | Member with the `general` mandate. |
 | User Advocate | 用户代表 | 使用者代表 | ユーザー代弁者 | 사용자 대변인 | Member mandate focused on user goals and constraints. |
 | Domain Expert | 领域专家 | 領域專家 | 領域専門家 | 도메인 전문가 | Member mandate focused on a specific domain. |
+| Domain Focus | 领域焦点 | 領域焦點 | 領域焦点 | 도메인 초점 | Optional field for `domain-expert` Member configuration; default is `product`; rejected for non-domain-expert mandates. |
+| technical | 技术 | 技術 | 技術 | 기술 | Domain Focus enum: feasibility, complexity, architecture risk, and delivery cost. |
+| product | 产品 | 產品 | プロダクト | 제품 | Domain Focus enum: demand strength, user journey, feature priority, and experience risk. |
+| market | 市场 | 市場 | 市場 | 시장 | Domain Focus enum: competition, market size, acquisition path, pricing, and positioning. |
+| legal | 法律/合规 | 法律/合規 | 法務/コンプライアンス | 법무/컴플라이언스 | Domain Focus enum: regulation, contract, privacy, intellectual property, and compliance risk. |
+| finance | 财务 | 財務 | 財務 | 재무 | Domain Focus enum: budget, cash flow, ROI, and cost structure. |
+| industry | 行业/场景 | 產業/場景 | 業界/シナリオ | 산업/시나리오 | Domain Focus enum: user-specified industry or business scenario facts. |
 | Action Planner | 行动规划者 | 行動規劃者 | 行動計画者 | 실행 계획자 | Member mandate focused on execution and validation steps. |
 | Red Team Member | 红队议员 | 紅隊議員 | レッドチーム議員 | 레드팀 의원 | Member mandate focused on failure paths, misuse risk, and hidden cost. |
 | Role Governance | 角色治理 | 角色治理 | 役割ガバナンス | 역할 거버넌스 | Rules that keep each agent within its role and mandate. |
@@ -170,6 +183,11 @@
 | OpenAI-compatible Provider | OpenAI 兼容提供方 | OpenAI 相容提供方 | OpenAI 互換プロバイダー | OpenAI 호환 제공자 | Provider that exposes an OpenAI-compatible API surface. |
 | Provider Profile | 提供方配置档案 | 提供方設定檔 | プロバイダープロファイル | 제공자 프로필 | Named provider configuration used by Agent Runtime without exposing secrets. |
 | Secret Reference | 密钥引用 | 金鑰引用 | シークレット参照 | 시크릿 참조 | Server-side reference to a secret value, such as an environment variable. |
+| User Reference | 用户引用 | 使用者引用 | ユーザー参照 | 사용자 참조 | Stable identifier used to associate Deliberation Records before a full account system exists. |
+| Local Anonymous User | 本地匿名用户 | 本地匿名使用者 | ローカル匿名ユーザー | 로컬 익명 사용자 | Current no-login user model stored in the browser and mapped to User Reference. |
+| Meeting Rule Type | 会议规则类型 | 會議規則類型 | 会議規則タイプ | 회의 규칙 유형 | Enum that records which deliberation rule system a session used. |
+| MeetingRuleType.robert_rules | 罗伯特议事规则 | 羅伯特議事規則 | ロバート議事規則 | 로버트 의사규칙 | Current Meeting Rule Type value for Robert's Rules of Order based sessions. |
+| robert_rules | 罗伯特议事规则 | 羅伯特議事規則 | ロバート議事規則 | 로버트 의사규칙 | Protocol enum value for `MeetingRuleType.robert_rules`. |
 | Search Provider | 搜索提供方 | 搜尋提供方 | 検索プロバイダー | 검색 제공자 | Provider or tool used to retrieve web search results. |
 | Thinking Mode | Thinking 模式 | Thinking 模式 | Thinking モード | Thinking 모드 | Provider or runtime configuration that enables deeper model reasoning without exposing raw reasoning text. |
 | Thinking Budget | Thinking 预算 | Thinking 預算 | Thinking 予算 | Thinking 예산 | Optional reasoning token, effort, or budget configuration. |
@@ -182,6 +200,9 @@
 | Canonical Term | 简体中文 | 繁體中文 | Japanese | Korean | Notes |
 | --- | --- | --- | --- | --- | --- |
 | State Machine | 状态机 | 狀態機 | 状態機械 | 상태 머신 | Core implementation model for deliberation flow. |
+| Record Repository | 记录仓库 | 記錄倉庫 | 記録リポジトリ | 기록 저장소 | Storage-neutral interface for creating, listing, reading, and replaying Deliberation Records. |
+| SQLite Adapter | SQLite 适配器 | SQLite 適配器 | SQLite アダプター | SQLite 어댑터 | Current local persistence implementation behind Record Repository. |
+| Postgres Adapter | Postgres 适配器 | Postgres 適配器 | Postgres アダプター | Postgres 어댑터 | Future cloud persistence implementation behind the same Record Repository contract. |
 | Stage | 阶段 | 階段 | 段階 | 단계 | One step in the deliberation flow; implementation field name is `phase`. |
 | Transition | 状态转换 | 狀態轉換 | 状態遷移 | 상태 전이 | Movement from one stage to another. |
 | Event | 事件 | 事件 | イベント | 이벤트 | Input that can trigger a transition. |
