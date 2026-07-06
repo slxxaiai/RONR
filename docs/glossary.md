@@ -40,13 +40,15 @@
 | Design Token | 设计令牌 | 設計權杖 | デザイントークン | 디자인 토큰 | Named visual value used by UI styles, such as color, radius, border, or focus ring. |
 | Focus Ring | 焦点环 | 焦點環 | フォーカスリング | 포커스 링 | Visible outline or shadow that indicates keyboard focus. |
 | Web Session Entry | Web 会话入口 | Web 會話入口 | Web セッション入口 | Web 세션 진입점 | Web entry point for creating a Deliberation Session. |
-| User Input Attachments | 用户输入附件 | 使用者輸入附件 | ユーザー入力添付 | 사용자 입력 첨부 | Web input capability for adding text, files, or links to a Deliberation Session. |
+| User Input Attachments | 用户输入附件 | 使用者輸入附件 | ユーザー入力添付 | 사용자 입력 첨부 | Web input capability for adding text, files, and URL sources to a Deliberation Session. |
 | New Meeting | 新建会议 | 新建會議 | 新規会議 | 새 회의 | Topic Panel mode for creating a new Deliberation Session. |
 | History | 历史会议 | 歷史會議 | 履歴会議 | 기록 회의 | Topic Panel mode for listing prior Deliberation Records. |
 | Text Input | 文字输入 | 文字輸入 | テキスト入力 | 텍스트 입력 | User-provided text question or context in the Web entry. |
 | File Input | 文件输入 | 檔案輸入 | ファイル入力 | 파일 입력 | User-provided file that must be normalized into a source-tracked context summary. |
-| Link Input | 链接输入 | 連結輸入 | リンク入力 | 링크 입력 | User-provided URL that must be normalized into a source-tracked context summary. |
-| Attachment Summary | 附件摘要 | 附件摘要 | 添付要約 | 첨부 요약 | Reviewable summary generated from File Input or Link Input before deliberation uses it as context. |
+| Link Input | 链接输入 | 連結輸入 | リンク入力 | 링크 입력 | Deprecated manual Web UI field; users now paste URLs in Text Input and RONR turns them into URL Source entries at session start. |
+| URL Source | URL 来源 | URL 來源 | URL 出典 | URL 출처 | Source Reference generated from a URL found in Text Input after server-side fetch and summarization. |
+| URL Content Fetch | URL 内容抓取 | URL 內容擷取 | URL コンテンツ取得 | URL 콘텐츠 가져오기 | Server-side attempt to read public HTTP(S) URL content, summarize it, and mark fetch success or failure. |
+| Attachment Summary | 附件摘要 | 附件摘要 | 添付要約 | 첨부 요약 | Reviewable summary generated from File Input before deliberation uses it as context. |
 | Next Deliberation Task | 下一步议事任务 | 下一步議事任務 | 次の熟議タスク | 다음 숙의 작업 | Chair-provided next task shown immediately after creating a Deliberation Session. |
 | Minimal Web Deliberation View | 最小 Web 议事视图 | 最小 Web 議事視圖 | 最小 Web 熟議ビュー | 최소 Web 숙의 뷰 | Minimal three-column web view for Topic Panel, Meeting Area, Role Configuration Panel, chat-style agent output, votes, and action plan. |
 | Topic Panel | 话题区 | 話題區 | トピックパネル | 주제 패널 | Left side panel for the user question, attachments, and Chair-led topic confirmation. |

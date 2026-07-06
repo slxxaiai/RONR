@@ -1,6 +1,11 @@
 import { join } from "node:path";
 import { createSessionRequestSchema, validateAgentConfig } from "@ronr/contracts";
-import type { CreateSessionRequest, DeliberationSessionSnapshot, DeliberationStreamEvent } from "@ronr/contracts";
+import type {
+  AgentRuntimeSessionRequest,
+  CreateSessionRequest,
+  DeliberationSessionSnapshot,
+  DeliberationStreamEvent
+} from "@ronr/contracts";
 import {
   createSqliteDeliberationRecordRepository
 } from "@ronr/db";
@@ -16,6 +21,7 @@ import {
   ProviderRuntimeError
 } from "@ronr/providers";
 import { runDeliberation, runDeliberationStream } from "@ronr/agents";
+import { buildUrlSourceReferences, stripExtractedUrls } from "./url-sources";
 
 export interface ApiHandlerOptions {
   recordRepository?: DeliberationRecordRepository;
@@ -95,14 +101,19 @@ export async function handleCreateSession(
       );
     }
 
-    const recordRepository = parsed.data.userReferenceId
+    const preparedRequest = await prepareSessionRequest(parsed.data, fetchImpl);
+    const termination = evaluatePreDeliberationTermination(preparedRequest);
+    if (termination) {
+      return Response.json(termination, { status: 422 });
+    }
+    const recordRepository = preparedRequest.userReferenceId
       ? options.recordRepository ?? getDefaultRecordRepository()
       : undefined;
-    const { snapshot, providerMeta, sessionEntry } = await runDeliberation(parsed.data, provider);
-    const record = parsed.data.userReferenceId && recordRepository
+    const { snapshot, providerMeta, sessionEntry } = await runDeliberation(preparedRequest, provider);
+    const record = preparedRequest.userReferenceId && recordRepository
       ? await persistCompletedRecord({
           repository: recordRepository,
-          request: parsed.data,
+          request: preparedRequest,
           sessionId: snapshot.id,
           events: [
             {
@@ -186,35 +197,46 @@ export async function handleCreateSessionStream(
           return;
         }
 
-        const repository = parsed.data.userReferenceId
+        const preparedRequest = await prepareSessionRequest(parsed.data, fetchImpl);
+        const termination = evaluatePreDeliberationTermination(preparedRequest);
+        if (termination) {
+          write({
+            type: "error",
+            code: termination.code,
+            message: termination.message,
+            recoveryHint: termination.recoveryHint
+          });
+          return;
+        }
+        const repository = preparedRequest.userReferenceId
           ? options.recordRepository ?? getDefaultRecordRepository()
           : undefined;
         let record: DeliberationRecordSummary | null = null;
         let sequence = 0;
-        for await (const event of runDeliberationStream(parsed.data, provider)) {
-          if (event.type === "session_started" && parsed.data.userReferenceId && repository) {
+        for await (const event of runDeliberationStream(preparedRequest, provider)) {
+          if (event.type === "session_started" && preparedRequest.userReferenceId && repository) {
             await repository.ensureUserReference({
-              id: parsed.data.userReferenceId,
+              id: preparedRequest.userReferenceId,
               type: "local_anonymous"
             });
             record = await repository.createRecord({
-              userReferenceId: parsed.data.userReferenceId,
+              userReferenceId: preparedRequest.userReferenceId,
               sessionId: event.sessionId,
-              meetingRuleType: parsed.data.meetingRuleType,
-              title: buildRecordTitle(parsed.data.userQuestion),
-              question: parsed.data.userQuestion,
-              locale: parsed.data.locale,
+              meetingRuleType: preparedRequest.meetingRuleType,
+              title: buildRecordTitle(preparedRequest.userQuestion),
+              question: preparedRequest.userQuestion,
+              locale: preparedRequest.locale,
               status: "active",
               phase: event.phase
             });
           }
           const outputEvent = record ? attachRecordToStreamEvent(event, record) : event;
-          if (record && parsed.data.userReferenceId) {
+          if (record && preparedRequest.userReferenceId) {
             sequence += 1;
             await repository?.appendEvent({
               recordId: record.id,
               sessionId: record.sessionId,
-              userReferenceId: parsed.data.userReferenceId,
+              userReferenceId: preparedRequest.userReferenceId,
               sequence,
               type: outputEvent.type,
               payload: outputEvent
@@ -335,9 +357,128 @@ function errorResponse(error: unknown): Response {
   );
 }
 
+async function prepareSessionRequest(
+  request: CreateSessionRequest,
+  fetchImpl: typeof fetch
+): Promise<AgentRuntimeSessionRequest> {
+  const { sourceReferences } = await buildUrlSourceReferences(request.userQuestion, fetchImpl, request.locale);
+  return {
+    ...request,
+    urlSourceReferences: sourceReferences
+  };
+}
+
+function evaluatePreDeliberationTermination(request: AgentRuntimeSessionRequest) {
+  const urlSources = request.urlSourceReferences ?? [];
+  if (urlSources.length === 0) return null;
+  if (urlSources.some((source) => source.fetchStatus === "completed")) return null;
+  if ((request.attachments ?? []).some((attachment) => attachment.summary.trim().length > 0)) return null;
+  const questionWithoutUrls = stripExtractedUrls(request.userQuestion);
+  if (hasEnoughQuestionContext(questionWithoutUrls)) return null;
+
+  const errorCodes = [...new Set(urlSources.map((source) => source.fetchErrorCode).filter(Boolean))];
+  return {
+    code: "insufficient_source_context",
+    message: "议事已终止：问题中主要内容是 URL，但系统未能读取这些 URL 的正文，无法形成可讨论的议题上下文。",
+    recoveryHint: [
+      errorCodes.includes("url_access_restricted")
+        ? "部分链接所在站点拒绝服务端读取、需要登录/验证，或只允许特定客户端访问；"
+        : undefined,
+      "请打开链接并把关键正文、摘要或截图中的文字粘贴到个人决策问题中；",
+      "也可以上传文本文件作为补充背景后重新启动议事。",
+      errorCodes.length > 0 ? `URL 读取错误：${errorCodes.join(", ")}。` : undefined
+    ].filter(Boolean).join("")
+  };
+}
+
+function hasEnoughQuestionContext(value: string): boolean {
+  const normalized = normalizeSubstantiveQuestionContext(value);
+  return normalized.length >= 4;
+}
+
+// URL workflow wording is not enough deliberation context when every URL failed.
+function normalizeSubstantiveQuestionContext(value: string): string {
+  let normalized = value;
+  for (const pattern of urlWorkflowInstructionPatterns) {
+    normalized = normalized.replace(pattern, " ");
+  }
+  for (const token of cjkUrlWorkflowFillerTokens) {
+    normalized = normalized.replace(new RegExp(escapeRegExp(token), "giu"), " ");
+  }
+  normalized = normalized.replace(asciiUrlWorkflowFillerPattern, " ");
+  return normalized
+    .replace(/[\s\p{P}\p{S}]+/gu, "")
+    .trim();
+}
+
+const urlWorkflowInstructionPatterns = [
+  /(?:请|麻烦)?(?:帮我|帮忙)?(?:根据|基于|参考|用|把|将|读取|抓取|打开|访问)?(?:这个|这条|这篇|该|上面|下面)?(?:url|链接|网址|网页|页面)(?:的)?(?:内容)?/giu,
+  /(?:请|麻烦)?(?:帮我|帮忙)?(?:根据|基于|参考|用|把|将|读取|抓取|打开|访问)(?:这个|这条|这篇|该|上面|下面)?(?:文章|内容|材料|资料|来源)(?:的)?(?:内容)?/gu,
+  /(?:创建|生成|建立|完善|发起|启动)(?:一个|本次|这次|新的)?(?:议题|议事|会议|会话)/gu,
+  /\b(?:please\s+)?(?:use|using|from|based\s+on|based\s+upon|refer\s+to|read|fetch|open|visit)?\s*(?:this|that|the)?\s*(?:url|link|website|webpage|page)\b/giu,
+  /\b(?:create|start|generate|make|build)\s+(?:a\s+|the\s+)?(?:topic|session|meeting|agenda)\b/giu
+];
+
+const cjkUrlWorkflowFillerTokens = [
+  "请",
+  "麻烦",
+  "帮我",
+  "帮忙",
+  "根据",
+  "基于",
+  "参考",
+  "用",
+  "把",
+  "将",
+  "这个",
+  "这条",
+  "这篇",
+  "该",
+  "上面",
+  "下面",
+  "链接",
+  "网址",
+  "网页",
+  "页面",
+  "内容",
+  "材料",
+  "资料",
+  "来源",
+  "创建",
+  "生成",
+  "建立",
+  "完善",
+  "发起",
+  "启动",
+  "议题",
+  "议事",
+  "会议",
+  "会话",
+  "看一下",
+  "看看",
+  "看下",
+  "一下",
+  "一个",
+  "本次",
+  "这次",
+  "新的",
+  "打开",
+  "访问",
+  "读取",
+  "抓取",
+  "总结",
+  "摘要"
+];
+
+const asciiUrlWorkflowFillerPattern = /\b(?:please|use|using|from|based|upon|refer|to|read|fetch|open|visit|this|that|the|url|link|website|webpage|page|content|source|create|start|generate|make|build|topic|session|meeting|agenda|summary|summarize)\b/giu;
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 async function persistCompletedRecord(input: {
   repository: DeliberationRecordRepository;
-  request: CreateSessionRequest;
+  request: AgentRuntimeSessionRequest;
   sessionId: string;
   events: DeliberationStreamEvent[];
   snapshot: DeliberationSessionSnapshot;

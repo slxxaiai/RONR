@@ -135,7 +135,7 @@ describe("user input attachments contract", () => {
     }
   };
 
-  test("accepts confirmed file and link attachment summaries", () => {
+  test("accepts confirmed file attachment summaries", () => {
     const result = createSessionRequestSchema.safeParse({
       ...baseRequest,
       attachments: [
@@ -149,7 +149,17 @@ describe("user input attachments contract", () => {
           sizeBytes: 120,
           confirmedByUser: true,
           readAt: "2026-06-18T00:00:00.000Z"
-        },
+        }
+      ]
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  test("rejects legacy link attachment summaries", () => {
+    const result = createSessionRequestSchema.safeParse({
+      ...baseRequest,
+      attachments: [
         {
           id: "att-link-1",
           type: "link",
@@ -162,19 +172,19 @@ describe("user input attachments contract", () => {
       ]
     });
 
-    expect(result.success).toBe(true);
+    expect(result.success).toBe(false);
   });
 
-  test("rejects unconfirmed or malformed attachment summaries", () => {
+  test("rejects unconfirmed or malformed file attachment summaries", () => {
     const result = createSessionRequestSchema.safeParse({
       ...baseRequest,
       attachments: [
         {
-          id: "att-link-1",
-          type: "link",
-          title: "坏链接",
+          id: "att-file-1",
+          type: "file",
+          title: "坏文件",
           summary: "摘要",
-          url: "not-a-url",
+          fileName: "budget.txt",
           confirmedByUser: false,
           readAt: "2026-06-18T00:00:00.000Z"
         }

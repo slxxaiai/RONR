@@ -432,7 +432,7 @@ textarea::placeholder {
 }
 
 .member-fields-focus-row {
-  grid-template-columns: minmax(96px, 116px) minmax(104px, 116px) minmax(34px, auto);
+  grid-template-columns: minmax(82px, 1fr) minmax(104px, 116px) minmax(34px, auto);
 }
 
 .member-role-label {
@@ -499,6 +499,13 @@ textarea::placeholder {
   font-weight: 400;
 }
 
+.attachment-url-hint {
+  color: var(--muted-foreground);
+  font-size: 12px;
+  line-height: 1.45;
+  margin: -2px 0 0;
+}
+
 .file-picker-control {
   align-items: center;
   border: 1px solid var(--border);
@@ -550,7 +557,6 @@ textarea::placeholder {
   position: absolute;
 }
 
-.link-input-grid,
 .attachment-list {
   display: grid;
   gap: 9px;
@@ -1136,6 +1142,85 @@ textarea::placeholder {
   letter-spacing: 0;
   line-height: 1.25;
   margin: 0;
+}
+
+.source-reference-panel {
+  background: rgb(255 255 255 / 0.72);
+  border: 1px solid rgb(228 228 231 / 0.92);
+  border-radius: var(--radius);
+  padding: 12px;
+}
+
+.source-reference-panel details {
+  display: grid;
+  gap: 10px;
+}
+
+.source-reference-summary {
+  align-items: center;
+  color: var(--foreground);
+  cursor: pointer;
+  display: flex;
+  font-size: 15px;
+  font-weight: 600;
+  justify-content: space-between;
+  letter-spacing: 0;
+  line-height: 1.25;
+  list-style-position: inside;
+}
+
+.source-reference-summary span:last-child {
+  background: var(--secondary);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted-foreground);
+  font-size: 12px;
+  font-weight: 500;
+  min-width: 24px;
+  padding: 2px 8px;
+  text-align: center;
+}
+
+.source-reference-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.source-reference-item {
+  border-top: 1px solid var(--border);
+  display: grid;
+  gap: 8px;
+  padding-top: 10px;
+}
+
+.source-reference-item:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.source-reference-item p {
+  color: var(--muted-foreground);
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.source-reference-failed {
+  border-color: #fecaca;
+}
+
+.source-reference-failed .trace-card-header span {
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+.tag-row a {
+  color: var(--foreground);
+  font-size: 12px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  text-decoration-color: var(--border);
 }
 
 .tag-row span,

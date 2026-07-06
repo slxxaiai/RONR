@@ -34,7 +34,7 @@ type RawApiError = {
 };
 
 type AttachmentDraft = UserInputAttachment;
-type MeetingProgressState = "waiting" | "running" | "active" | "completed" | "failed";
+type MeetingProgressState = "waiting" | "preparing" | "running" | "active" | "completed" | "failed";
 type TopicPanelMode = "new" | "history";
 type VisibleStreamEvent = DeliberationStreamThinkingEvent | DeliberationStreamSearchSourcesEvent | { type: "speech"; speech: Speech };
 type AgentTurn = {
@@ -142,9 +142,6 @@ export default function HomePage() {
   const [question, setQuestion] = useState("");
   const [attachments, setAttachments] = useState<AttachmentDraft[]>([]);
   const [attachmentError, setAttachmentError] = useState<TranslationKey | null>(null);
-  const [linkUrl, setLinkUrl] = useState("");
-  const [linkTitle, setLinkTitle] = useState("");
-  const [linkSummary, setLinkSummary] = useState("");
   const [loadingModels, setLoadingModels] = useState(true);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<RawApiError | null>(null);
@@ -371,6 +368,7 @@ export default function HomePage() {
                   <div className="trace-card-header">
                     <h2>{t("attachments.title")}</h2>
                   </div>
+                  <p className="attachment-url-hint">{t("attachments.urlHint")}</p>
                   <div className="file-picker-field">
                     <span className="file-picker-label">{t("attachments.file")}</span>
                     <span className="file-picker-control">
@@ -394,37 +392,6 @@ export default function HomePage() {
                         type="file"
                       />
                     </span>
-                  </div>
-                  <div className="link-input-grid">
-                    <label>
-                      <span>{t("attachments.linkUrl")}</span>
-                      <input
-                        aria-label={t("attachments.linkUrl")}
-                        inputMode="url"
-                        onChange={(event) => setLinkUrl(event.target.value)}
-                        value={linkUrl}
-                      />
-                    </label>
-                    <label>
-                      <span>{t("attachments.linkTitle")}</span>
-                      <input
-                        aria-label={t("attachments.linkTitle")}
-                        onChange={(event) => setLinkTitle(event.target.value)}
-                        value={linkTitle}
-                      />
-                    </label>
-                    <label>
-                      <span>{t("attachments.linkSummary")}</span>
-                      <textarea
-                        aria-label={t("attachments.linkSummary")}
-                        className="attachment-summary-input"
-                        onChange={(event) => setLinkSummary(event.target.value)}
-                        value={linkSummary}
-                      />
-                    </label>
-                    <button className="secondary-action" type="button" onClick={addLinkAttachment}>
-                      {t("attachments.addLink")}
-                    </button>
                   </div>
                   {attachmentError && (
                     <p className="validation-message" role="alert">
@@ -501,6 +468,10 @@ export default function HomePage() {
                 <MeetingReplaySummary detail={activeRecordDetail} t={t} />
               )}
 
+              {!localizedError && (snapshot || activeRecordDetail?.snapshot) && (
+                <SourceReferencePanel snapshot={snapshot ?? activeRecordDetail?.snapshot ?? null} t={t} />
+              )}
+
               {!localizedError && (snapshot || streamEvents.length > 0) && (
                 <MeetingEventStream
                   animateSpeech={!activeRecordDetail}
@@ -514,8 +485,12 @@ export default function HomePage() {
                   <div className="chat-message chat-message-system">
                     <div className="chat-avatar" aria-hidden="true">AI</div>
                     <div className="chat-bubble">
-                      <strong>{t("layout.waitingOutput")}</strong>
-                      <p>{t("session.nextTask")}: {t("phase.call_to_order")}</p>
+                      <strong>{running ? t("layout.preparingOutput") : t("layout.waitingOutput")}</strong>
+                      <p>
+                        {running
+                          ? t("layout.preparingOutput.detail")
+                          : `${t("session.nextTask")}: ${t("phase.call_to_order")}`}
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -799,36 +774,6 @@ export default function HomePage() {
     }
   }
 
-  function addLinkAttachment() {
-    const url = linkUrl.trim();
-    const title = linkTitle.trim();
-    const summary = linkSummary.trim();
-    if (!isHttpUrl(url)) {
-      setAttachmentError("attachments.linkInvalid");
-      return;
-    }
-    if (!title || !summary) {
-      setAttachmentError("attachments.summaryRequired");
-      return;
-    }
-    setAttachments((current) => [
-      ...current,
-      {
-        id: `att-link-${crypto.randomUUID()}`,
-        type: "link",
-        title,
-        summary,
-        url,
-        confirmedByUser: true,
-        readAt: new Date().toISOString()
-      }
-    ]);
-    setLinkUrl("");
-    setLinkTitle("");
-    setLinkSummary("");
-    setAttachmentError(null);
-  }
-
   async function consumeSessionStream(response: Response) {
     if (!response.body) {
       throw {
@@ -1088,9 +1033,8 @@ function AttachmentList({
             <span>{t("attachments.confirmed")}</span>
           </div>
           <div className="tag-row">
-            <span>{attachment.type === "file" ? t("attachments.file") : t("attachments.linkUrl")}</span>
+            <span>{t("attachments.file")}</span>
             {attachment.fileName && <span>{attachment.fileName}</span>}
-            {attachment.url && <span>{attachment.url}</span>}
           </div>
           <label>
             <span>{t("attachments.summary")}</span>
@@ -1107,6 +1051,45 @@ function AttachmentList({
         </article>
       ))}
     </div>
+  );
+}
+
+function SourceReferencePanel({
+  snapshot,
+  t
+}: {
+  snapshot: DeliberationSessionSnapshot | null;
+  t: Translator;
+}) {
+  const references = snapshot?.sourceReferences ?? [];
+  if (references.length === 0) return null;
+
+  return (
+    <section className="source-reference-panel" aria-label={t("result.sourceReferences")}>
+      <details>
+        <summary className="source-reference-summary">
+          <span>{t("result.sourceReferences")}</span>
+          <span>{references.length}</span>
+        </summary>
+        <div className="source-reference-list">
+          {references.map((source) => (
+            <article className={`source-reference-item${source.fetchStatus === "failed" ? " source-reference-failed" : ""}`} key={source.id}>
+              <div className="trace-card-header">
+                <strong>{source.title}</strong>
+                <span>{source.fetchStatus ? t(`source.fetchStatus.${source.fetchStatus}`) : source.type}</span>
+              </div>
+              <p>{source.summary}</p>
+              <div className="tag-row">
+                <span>{source.type}</span>
+                {source.url && <a href={source.url} rel="noreferrer" target="_blank">{source.url}</a>}
+                {source.fileName && <span>{source.fileName}</span>}
+                {source.fetchErrorCode && <span>{t("source.fetchErrorCode")}: {source.fetchErrorCode}</span>}
+              </div>
+            </article>
+          ))}
+        </div>
+      </details>
+    </section>
   );
 }
 
@@ -1201,6 +1184,7 @@ function MeetingStatusBar({
   streamEvents: VisibleStreamEvent[];
   t: Translator;
 }) {
+  const preparing = running && !sessionEntry && !snapshot && streamEvents.length === 0;
   const currentPhase = resolveCurrentPhase(sessionEntry, snapshot, streamEvents);
   const activeAgentId = resolveActiveAgentId(sessionEntry, snapshot, streamEvents);
   const currentSpeakerAgentId = resolveCurrentSpeakerAgentId(sessionEntry, snapshot, streamEvents);
@@ -1210,15 +1194,15 @@ function MeetingStatusBar({
     <div className="meeting-status-bar" aria-label={t("meetingStatus.label")}>
       <span className="meeting-status-item">
         <span className="meeting-status-label">{t("meetingStatus.stage")}</span>
-        <span className="meeting-status-value">{t(`phase.${currentPhase}`)}</span>
+        <span className="meeting-status-value">{preparing ? t("meetingStatus.urlContentFetch") : t(`phase.${currentPhase}`)}</span>
       </span>
       <span className="meeting-status-item">
         <span className="meeting-status-label">{t("meetingStatus.activeAgent")}</span>
-        <span className="meeting-status-value">{activeAgentId}</span>
+        <span className="meeting-status-value">{preparing ? t("meetingStatus.system") : activeAgentId}</span>
       </span>
       <span className="meeting-status-item">
         <span className="meeting-status-label">{t("meetingStatus.currentSpeaker")}</span>
-        <span className="meeting-status-value">{currentSpeakerAgentId}</span>
+        <span className="meeting-status-value">{preparing ? t("meetingStatus.system") : currentSpeakerAgentId}</span>
       </span>
       <span className="meeting-status-state" data-state={progressState}>
         {t(`meetingStatus.${progressState}`)}
@@ -1294,6 +1278,7 @@ function resolveMeetingProgressState({
   snapshot: DeliberationSessionSnapshot | null;
 }): MeetingProgressState {
   if (localizedError) return "failed";
+  if (running && !sessionEntry && !snapshot) return "preparing";
   if (running) return "running";
   if (snapshot?.status === "completed") return "completed";
   if (sessionEntry) return "active";
@@ -1376,15 +1361,6 @@ function summarizeAttachmentText(text: string): string {
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, 1200);
-}
-
-function isHttpUrl(value: string): boolean {
-  try {
-    const url = new URL(value);
-    return url.protocol === "http:" || url.protocol === "https:";
-  } catch {
-    return false;
-  }
 }
 
 function mergeMeetingEvents(
@@ -1719,6 +1695,10 @@ function translateError(code: string, t: Translator): ApiError | null {
     invalid_request: {
       message: "error.invalidRequest",
       recoveryHint: "error.invalidRequest.recoveryHint"
+    },
+    insufficient_source_context: {
+      message: "error.insufficientSourceContext",
+      recoveryHint: "error.insufficientSourceContext.recoveryHint"
     },
     invalid_agent_config: {
       message: "error.invalidAgentConfig",

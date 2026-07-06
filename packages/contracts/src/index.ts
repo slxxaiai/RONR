@@ -83,24 +83,16 @@ export type AgentConfig = z.infer<typeof agentConfigSchema>;
 
 export const userInputAttachmentSchema = z.object({
   id: z.string().min(1),
-  type: z.enum(["file", "link"]),
+  type: z.literal("file"),
   title: z.string().trim().min(1),
   summary: z.string().trim().min(1),
   confirmedByUser: z.literal(true),
-  url: z.string().url().optional(),
   fileName: z.string().trim().min(1).optional(),
   mimeType: z.string().trim().optional(),
   sizeBytes: z.number().int().nonnegative().optional(),
   readAt: z.string().datetime()
 }).superRefine((attachment, context) => {
-  if (attachment.type === "link" && !attachment.url) {
-    context.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ["url"],
-      message: "link attachment requires url"
-    });
-  }
-  if (attachment.type === "file" && !attachment.fileName) {
+  if (!attachment.fileName) {
     context.addIssue({
       code: z.ZodIssueCode.custom,
       path: ["fileName"],
@@ -109,6 +101,18 @@ export const userInputAttachmentSchema = z.object({
   }
 });
 export type UserInputAttachment = z.infer<typeof userInputAttachmentSchema>;
+
+const urlSourceReferenceSchema = z.object({
+  id: z.string().min(1),
+  type: z.literal("url_input"),
+  title: z.string().trim().min(1),
+  summary: z.string().trim().min(1),
+  url: z.string().url(),
+  fetchStatus: z.enum(["completed", "failed"]),
+  fetchErrorCode: z.string().trim().min(1).optional(),
+  readAt: z.string().datetime(),
+  confirmedByUser: z.literal(true)
+});
 
 export const createSessionRequestSchema = z.object({
   userQuestion: z.string().trim().min(1),
@@ -120,6 +124,11 @@ export const createSessionRequestSchema = z.object({
   maxDeliberationRounds: z.number().int().positive().optional()
 });
 export type CreateSessionRequest = z.infer<typeof createSessionRequestSchema>;
+
+export const agentRuntimeSessionRequestSchema = createSessionRequestSchema.extend({
+  urlSourceReferences: z.array(urlSourceReferenceSchema).max(5).optional()
+});
+export type AgentRuntimeSessionRequest = z.infer<typeof agentRuntimeSessionRequestSchema>;
 
 export type ValidationResult =
   | { success: true; errors: [] }
@@ -207,13 +216,15 @@ export interface ProviderCallMeta {
 
 export interface SourceReference {
   id: string;
-  type: "text_input" | "file_input" | "link_input";
+  type: "text_input" | "file_input" | "url_input";
   title: string;
   summary: string;
   url?: string;
   fileName?: string;
   mimeType?: string;
   sizeBytes?: number;
+  fetchStatus?: "completed" | "failed";
+  fetchErrorCode?: string;
   readAt: string;
   confirmedByUser: boolean;
 }

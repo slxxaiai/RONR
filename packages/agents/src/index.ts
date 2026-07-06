@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type {
   AgentConfig,
-  CreateSessionRequest,
+  AgentRuntimeSessionRequest,
   DeliberationStreamEvent,
   DeliberationSessionSnapshot,
   DomainFocus,
@@ -158,7 +158,7 @@ type DeliberationTranscriptEntry = {
 };
 
 export async function runDeliberation(
-  request: CreateSessionRequest,
+  request: AgentRuntimeSessionRequest,
   provider: ModelProvider
 ): Promise<{ snapshot: DeliberationSessionSnapshot; providerMeta: ProviderCallMeta[]; sessionEntry: SessionEntry }> {
   const sessionId = `session-${crypto.randomUUID()}`;
@@ -318,7 +318,7 @@ export async function runDeliberation(
 }
 
 export async function* runDeliberationStream(
-  request: CreateSessionRequest,
+  request: AgentRuntimeSessionRequest,
   provider: ModelProvider
 ): AsyncGenerator<DeliberationStreamEvent> {
   const sessionId = `session-${crypto.randomUUID()}`;
@@ -982,7 +982,7 @@ function buildAgents(agentConfig: AgentConfig): DeliberationSessionSnapshot["age
   ];
 }
 
-function buildSourceReferences(request: CreateSessionRequest, now: string): SourceReference[] {
+function buildSourceReferences(request: AgentRuntimeSessionRequest, now: string): SourceReference[] {
   return [
     {
       id: "source-text-input",
@@ -994,16 +994,16 @@ function buildSourceReferences(request: CreateSessionRequest, now: string): Sour
     },
     ...(request.attachments ?? []).map((attachment): SourceReference => ({
       id: attachment.id,
-      type: attachment.type === "file" ? "file_input" : "link_input",
+      type: "file_input",
       title: attachment.title,
       summary: attachment.summary,
-      ...(attachment.url ? { url: attachment.url } : {}),
       ...(attachment.fileName ? { fileName: attachment.fileName } : {}),
       ...(attachment.mimeType ? { mimeType: attachment.mimeType } : {}),
       ...(attachment.sizeBytes !== undefined ? { sizeBytes: attachment.sizeBytes } : {}),
       readAt: attachment.readAt,
       confirmedByUser: attachment.confirmedByUser
-    }))
+    })),
+    ...(request.urlSourceReferences ?? [])
   ];
 }
 
@@ -1019,6 +1019,8 @@ function buildChairPrompt(userQuestion: string, locale: Locale, sourceReferences
       `Title: ${source.title}`,
       source.url ? `URL: ${source.url}` : undefined,
       source.fileName ? `File: ${source.fileName}` : undefined,
+      source.fetchStatus ? `Fetch Status: ${source.fetchStatus}` : undefined,
+      source.fetchErrorCode ? `Fetch Error: ${source.fetchErrorCode}` : undefined,
       `Summary: ${source.summary}`
     ].filter(Boolean).join("\n")),
     "请作为 Chair Agent 输出 JSON：",

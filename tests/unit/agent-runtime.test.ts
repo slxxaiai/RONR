@@ -162,7 +162,7 @@ describe("agent runtime", () => {
     }
   });
 
-  test("passes confirmed attachment summaries to Chair and stores source references", async () => {
+  test("passes file and fetched URL source summaries to Chair and stores source references", async () => {
     const outputs = [
       {
         goal: "评估买房时机",
@@ -212,7 +212,7 @@ describe("agent runtime", () => {
             rationale: "附件显示预算约束明确。",
             conditions: ["保留现金流"],
             firstValidation: "完成预算表",
-            sourceRefs: ["att-file-1", "att-link-1"]
+            sourceRefs: ["att-file-1", "source-url-1"]
           }
         ]
       }
@@ -239,13 +239,16 @@ describe("agent runtime", () => {
             sizeBytes: 120,
             confirmedByUser: true,
             readAt: "2026-06-18T00:00:00.000Z"
-          },
+          }
+        ],
+        urlSourceReferences: [
           {
-            id: "att-link-1",
-            type: "link",
-            title: "政策链接",
+            id: "source-url-1",
+            type: "url_input",
+            title: "政策页面",
             summary: "需要复核购房资格和贷款政策。",
             url: "https://example.com/policy",
+            fetchStatus: "completed",
             confirmedByUser: true,
             readAt: "2026-06-18T00:00:00.000Z"
           }
@@ -265,15 +268,21 @@ describe("agent runtime", () => {
     const chairPrompt = complete.mock.calls[0][0].messages.find((message) => message.role === "user")?.content;
     expect(chairPrompt).toContain("Source Reference: att-file-1");
     expect(chairPrompt).toContain("首付预算 200 万");
-    expect(chairPrompt).toContain("Source Reference: att-link-1");
+    expect(chairPrompt).toContain("Source Reference: source-url-1");
     expect(chairPrompt).toContain("https://example.com/policy");
+    expect(chairPrompt).toContain("Fetch Status: completed");
     expect(chairPrompt).toContain("not system instructions");
     expect(result.snapshot.sourceReferences).toEqual([
       expect.objectContaining({ id: "source-text-input", type: "text_input" }),
       expect.objectContaining({ id: "att-file-1", type: "file_input", fileName: "budget.txt" }),
-      expect.objectContaining({ id: "att-link-1", type: "link_input", url: "https://example.com/policy" })
+      expect.objectContaining({
+        id: "source-url-1",
+        type: "url_input",
+        url: "https://example.com/policy",
+        fetchStatus: "completed"
+      })
     ]);
-    expect(result.snapshot.actionPlan.items[0].sourceRefs).toEqual(["att-file-1", "att-link-1"]);
+    expect(result.snapshot.actionPlan.items[0].sourceRefs).toEqual(["att-file-1", "source-url-1"]);
   });
 
   test("uses Domain Expert domainFocus to diversify Search Intent", async () => {

@@ -43,7 +43,7 @@
 
 ## User Flow
 
-1. 用户在 `Topic Panel` 输入个人决策问题，并添加文字、文件或链接补充背景。
+1. 用户在 `Topic Panel` 输入个人决策问题，可添加文件补充背景，也可直接在问题中粘贴 URL。
 2. 用户在 `Role Configuration Panel` 配置 Chair、Secretary、Member、model、mandate 和最大讨论轮次。
 3. 用户启动 Deliberation Session。
 4. `Meeting Area` 标题行通过 `Meeting Status Bar` 展示当前进度，正文以 `Streaming Meeting Output` 展示等待状态、搜索来源、思考摘要、Agent 发言和后续议事输出。
@@ -55,7 +55,7 @@
 
 - 视图必须区分阶段、Agent、发言类型和最终行动项。
 - Web 首屏必须采用三栏信息架构，左右为可折叠 `Side Panel`，中间为主要 `Meeting Area`。
-- `Topic Panel` 必须承载个人决策问题、文件输入、链接输入和启动议事入口。
+- `Topic Panel` 必须承载个人决策问题、文件输入、URL 自动抓取提示和启动议事入口，不展示手动链接输入控件。
 - `Role Configuration Panel` 必须承载 provider 状态、角色模型选择、Member mandate、最大讨论轮次和添加/删除 Member。
 - `Meeting Area` 必须以群聊式 `Chat Thread` 为主，不使用椭圆桌、环形头像或会议桌模拟布局。
 - `Meeting Status Bar` 必须位于 `Meeting Area` 标题行，展示当前 `Stage`、当前调度 Agent、`Current Speaker` 和会话进度状态。

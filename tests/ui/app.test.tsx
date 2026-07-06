@@ -182,7 +182,7 @@ describe("RONR web app", () => {
     ]);
   });
 
-  test("lets users add file and link attachment summaries before starting a session", async () => {
+  test("lets users add file summaries and paste URLs into the question before starting a session", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = input.toString();
       if (url === "/api/providers/ppio/models") {
@@ -232,11 +232,12 @@ describe("RONR web app", () => {
                 confirmedByUser: true
               },
               {
-                id: "att-link-1",
-                type: "link_input",
+                id: "source-url-1",
+                type: "url_input",
                 title: "Policy note",
-                summary: "Policy summary",
+                summary: "Policy summary from fetched URL",
                 url: "https://example.com/policy",
+                fetchStatus: "completed",
                 readAt: "2026-06-18T00:00:00.000Z",
                 confirmedByUser: true
               }
@@ -256,22 +257,21 @@ describe("RONR web app", () => {
     expect(screen.queryByText("语音")).not.toBeInTheDocument();
     expect(screen.queryByText("麦克风")).not.toBeInTheDocument();
     expect(screen.queryByText("音频")).not.toBeInTheDocument();
+    expect(screen.getByText("可直接在个人决策问题中粘贴 URL，启动议事时会尝试读取网页内容。")).toBeInTheDocument();
+    expect(screen.queryByLabelText("链接 URL")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("链接标题")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("链接摘要")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "添加链接摘要" })).not.toBeInTheDocument();
 
     const fileInput = screen.getByLabelText("文件输入") as HTMLInputElement;
     const file = new File(["首付预算 200 万，月供不能超过收入 35%。"], "budget.txt", { type: "text/plain" });
     fireEvent.change(fileInput, { target: { files: [file] } });
     await waitFor(() => expect(screen.getAllByText("budget.txt").length).toBeGreaterThan(0));
 
-    fireEvent.change(screen.getByLabelText("链接 URL"), { target: { value: "https://example.com/policy" } });
-    fireEvent.change(screen.getByLabelText("链接标题"), { target: { value: "Policy note" } });
-    fireEvent.change(screen.getByLabelText("链接摘要"), { target: { value: "Policy summary" } });
-    fireEvent.click(screen.getByRole("button", { name: "添加链接摘要" }));
-    expect(screen.getByText("Policy note")).toBeInTheDocument();
-
     const summaries = screen.getAllByLabelText("输入摘要");
     fireEvent.change(summaries[0], { target: { value: "Edited budget summary" } });
     fireEvent.change(screen.getByLabelText("个人决策问题"), {
-      target: { value: "我应该现在买房吗？" }
+      target: { value: "我应该现在买房吗？请参考 https://example.com/policy" }
     });
     fireEvent.click(screen.getByRole("button", { name: "启动议事" }));
 
@@ -285,16 +285,183 @@ describe("RONR web app", () => {
         summary: "Edited budget summary",
         fileName: "budget.txt",
         confirmedByUser: true
-      }),
-      expect.objectContaining({
-        type: "link",
-        title: "Policy note",
-        summary: "Policy summary",
-        url: "https://example.com/policy",
-        confirmedByUser: true
       })
     ]);
-    expect(screen.queryByRole("region", { name: "来源引用" })).not.toBeInTheDocument();
+    expect(JSON.stringify(requestBody)).not.toContain("\"type\":\"link\"");
+    expect(requestBody.userQuestion).toContain("https://example.com/policy");
+    expect(screen.getByRole("region", { name: "来源引用" })).toBeInTheDocument();
+    expect(screen.queryByText("Policy note")).not.toBeVisible();
+    fireEvent.click(screen.getByText("来源引用"));
+    expect(screen.getByText("Policy note")).toBeInTheDocument();
+    expect(screen.getByText("Policy summary from fetched URL")).toBeInTheDocument();
+    expect(screen.getByText("网页已读取")).toBeInTheDocument();
+  });
+
+  test("shows failed URL source status after the session completes", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = input.toString();
+      if (url === "/api/providers/ppio/models") {
+        return new Response(
+          JSON.stringify({
+            models: [
+              {
+                id: "model-a",
+                title: "Model A",
+                description: "A",
+                contextSize: 32000,
+                inputTokenPricePerM: 1,
+                outputTokenPricePerM: 2
+              }
+            ]
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }
+
+      return new Response(
+        JSON.stringify({
+          sessionId: sessionSnapshot.id,
+          status: "completed",
+          phase: "action_resolution",
+          initialPhase: "call_to_order",
+          activeAgentId: "chair",
+          currentSpeakerAgentId: "chair",
+          nextTask: "Member discussion starts.",
+          sessionEntry: {
+            phase: "call_to_order",
+            activeAgentId: "chair",
+            currentSpeakerAgentId: "chair",
+            nextTask: "Member discussion starts."
+          },
+          sessionSnapshot: {
+            ...sessionSnapshot,
+            sourceReferences: [
+              ...sessionSnapshot.sourceReferences,
+              {
+                id: "source-url-1",
+                type: "url_input",
+                title: "example.com",
+                summary: "URL 内容未能读取。本次议事已继续，但不会使用该页面正文作为上下文。",
+                url: "https://example.com/unavailable",
+                fetchStatus: "failed",
+                fetchErrorCode: "url_fetch_failed",
+                readAt: "2026-06-18T00:00:00.000Z",
+                confirmedByUser: true
+              }
+            ]
+          },
+          providerMeta: []
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<HomePage />);
+
+    await waitFor(() => expect(screen.getByText("1 个模型已加载")).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText("个人决策问题"), {
+      target: { value: "我应该现在买房吗？https://example.com/unavailable" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "启动议事" }));
+
+    await waitFor(() => expect(screen.getByRole("region", { name: "来源引用" })).toBeInTheDocument());
+    expect(screen.queryByText("网页读取失败")).not.toBeVisible();
+    fireEvent.click(screen.getByText("来源引用"));
+    expect(screen.getByText("网页读取失败")).toBeInTheDocument();
+    expect(screen.getByText(/url_fetch_failed/)).toBeInTheDocument();
+    const sessionCall = fetchMock.mock.calls.find(([input]) => input.toString() === "/api/sessions/stream");
+    const requestBody = JSON.parse(String(sessionCall?.[1]?.body));
+    expect(requestBody.attachments).toEqual([]);
+    expect(JSON.stringify(requestBody)).not.toContain("urlSourceReferences");
+  });
+
+  test("shows a localized termination reason when URL-only input cannot be read", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = input.toString();
+      if (url === "/api/providers/ppio/models") {
+        return new Response(
+          JSON.stringify({
+            models: [
+              {
+                id: "model-a",
+                title: "Model A",
+                description: "A",
+                contextSize: 32000,
+                inputTokenPricePerM: 1,
+                outputTokenPricePerM: 2
+              }
+            ]
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }
+
+      return new Response(
+        `${JSON.stringify({
+          type: "error",
+          code: "insufficient_source_context",
+          message: "议事已终止：问题中主要内容是 URL，但系统未能读取这些 URL 的正文，无法形成可讨论的议题上下文。",
+          recoveryHint: "请打开链接并把关键正文、摘要或截图中的文字粘贴到个人决策问题中。URL 读取错误：url_access_restricted。"
+        })}\n`,
+        { status: 200, headers: { "Content-Type": "application/x-ndjson" } }
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<HomePage />);
+
+    await waitFor(() => expect(screen.getByText("1 个模型已加载")).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText("个人决策问题"), {
+      target: { value: "https://mp.weixin.qq.com/s/example" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "启动议事" }));
+
+    await waitFor(() => expect(screen.getByRole("alert")).toBeInTheDocument());
+    expect(screen.getByText("议事已终止：URL 内容未能读取，缺少可讨论的议题上下文。")).toBeInTheDocument();
+    expect(screen.getByText("该站点可能拒绝服务端读取、需要登录/验证，或只允许特定客户端访问。请打开链接并把关键正文、摘要或截图文字粘贴到个人决策问题中，或上传文本文件后重新启动议事。")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "启动议事" })).toBeEnabled();
+    expect(screen.queryByText("Chair 正在确认议题。")).not.toBeInTheDocument();
+  });
+
+  test("shows URL source preparation before the session enters Chair deliberation", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = input.toString();
+      if (url === "/api/providers/ppio/models") {
+        return new Response(
+          JSON.stringify({
+            models: [
+              {
+                id: "model-a",
+                title: "Model A",
+                description: "A",
+                contextSize: 32000,
+                inputTokenPricePerM: 1,
+                outputTokenPricePerM: 2
+              }
+            ]
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }
+
+      return new Promise<Response>(() => undefined);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<HomePage />);
+
+    await waitFor(() => expect(screen.getByText("1 个模型已加载")).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText("个人决策问题"), {
+      target: { value: "用'https://zhuanlan.zhihu.com/p/359677510'创建议题" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "启动议事" }));
+
+    await waitFor(() => expect(screen.getByText("正在读取 URL 来源")).toBeInTheDocument());
+    expect(screen.getByText("系统正在尝试读取问题中的 URL，并判断是否有足够议题上下文。")).toBeInTheDocument();
+    expect(screen.getByText("URL 内容抓取")).toBeInTheDocument();
+    expect(screen.getAllByText("系统").length).toBeGreaterThan(0);
+    expect(screen.queryByText("议题确认")).not.toBeInTheDocument();
   });
 
   test("shows new meeting and history entries linked to the local user reference", async () => {
@@ -614,7 +781,8 @@ describe("RONR web app", () => {
     expect(css).toContain("width: clamp(300px, 22vw, 360px)");
     expect(css).toContain("width: 100%");
     expect(css).toContain("grid-template-columns: minmax(82px, 1fr) minmax(104px, 116px) minmax(34px, auto)");
-    expect(css).toContain("grid-template-columns: minmax(96px, 116px) minmax(104px, 116px) minmax(34px, auto)");
+    expect(css).toMatch(/\.member-fields-focus-row\s*\{\s*grid-template-columns:\s*minmax\(82px,\s*1fr\)\s+minmax\(104px,\s*116px\)\s+minmax\(34px,\s*auto\);/s);
+    expect(css).not.toContain("grid-template-columns: minmax(96px, 116px) minmax(104px, 116px) minmax(34px, auto)");
     expect(css).toContain("grid-template-columns: minmax(82px, 1fr) minmax(104px, 116px)");
     expect(css).not.toContain(".meeting-table");
     expect(css).not.toContain(".agent-ring");

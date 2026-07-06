@@ -51,6 +51,8 @@ export type TranslationKey =
   | "layout.showRolePanel"
   | "layout.meetingOutput"
   | "layout.waitingOutput"
+  | "layout.preparingOutput"
+  | "layout.preparingOutput.detail"
   | "layout.activeAgent"
   | "layout.currentSpeaker"
   | "meetingStatus.label"
@@ -58,10 +60,13 @@ export type TranslationKey =
   | "meetingStatus.activeAgent"
   | "meetingStatus.currentSpeaker"
   | "meetingStatus.waiting"
+  | "meetingStatus.preparing"
   | "meetingStatus.running"
   | "meetingStatus.active"
   | "meetingStatus.completed"
   | "meetingStatus.failed"
+  | "meetingStatus.urlContentFetch"
+  | "meetingStatus.system"
   | "stream.thinking"
   | "stream.searchSources"
   | "stream.thinkingDetails"
@@ -75,10 +80,7 @@ export type TranslationKey =
   | "attachments.file.help"
   | "attachments.chooseFile"
   | "attachments.noFileSelected"
-  | "attachments.linkUrl"
-  | "attachments.linkTitle"
-  | "attachments.linkSummary"
-  | "attachments.addLink"
+  | "attachments.urlHint"
   | "attachments.summary"
   | "attachments.confirmed"
   | "attachments.remove"
@@ -86,12 +88,16 @@ export type TranslationKey =
   | "attachments.fileUnsupported"
   | "attachments.fileTooLarge"
   | "attachments.fileReadFailed"
-  | "attachments.linkInvalid"
   | "attachments.summaryRequired"
   | "attachments.summaryMissing"
+  | "source.fetchStatus.completed"
+  | "source.fetchStatus.failed"
+  | "source.fetchErrorCode"
   | "error.unknownRequest"
   | "error.invalidRequest"
   | "error.invalidRequest.recoveryHint"
+  | "error.insufficientSourceContext"
+  | "error.insufficientSourceContext.recoveryHint"
   | "error.invalidAgentConfig"
   | "error.invalidAgentConfig.recoveryHint"
   | "error.providerConfig"
@@ -222,6 +228,8 @@ const zhCN: Record<TranslationKey, string> = {
   "layout.showRolePanel": "显示角色配置区",
   "layout.meetingOutput": "会议输出",
   "layout.waitingOutput": "等待启动议事",
+  "layout.preparingOutput": "正在读取 URL 来源",
+  "layout.preparingOutput.detail": "系统正在尝试读取问题中的 URL，并判断是否有足够议题上下文。",
   "layout.activeAgent": "当前调度",
   "layout.currentSpeaker": "正在发言",
   "meetingStatus.label": "会议进度状态",
@@ -229,10 +237,13 @@ const zhCN: Record<TranslationKey, string> = {
   "meetingStatus.activeAgent": "当前调度",
   "meetingStatus.currentSpeaker": "正在发言",
   "meetingStatus.waiting": "等待启动",
+  "meetingStatus.preparing": "准备中",
   "meetingStatus.running": "进行中",
   "meetingStatus.active": "议事中",
   "meetingStatus.completed": "已完成",
   "meetingStatus.failed": "异常",
+  "meetingStatus.urlContentFetch": "URL 内容抓取",
+  "meetingStatus.system": "系统",
   "stream.thinking": "思考中",
   "stream.searchSources": "引用来源",
   "stream.thinkingDetails": "思考过程",
@@ -246,10 +257,7 @@ const zhCN: Record<TranslationKey, string> = {
   "attachments.file.help": "支持 .txt、.md、.csv、.json，读取后请确认摘要。",
   "attachments.chooseFile": "选择文件",
   "attachments.noFileSelected": "未选择文件",
-  "attachments.linkUrl": "链接 URL",
-  "attachments.linkTitle": "链接标题",
-  "attachments.linkSummary": "链接摘要",
-  "attachments.addLink": "添加链接摘要",
+  "attachments.urlHint": "可直接在个人决策问题中粘贴 URL，启动议事时会尝试读取网页内容。",
   "attachments.summary": "输入摘要",
   "attachments.confirmed": "已确认",
   "attachments.remove": "移除",
@@ -257,12 +265,16 @@ const zhCN: Record<TranslationKey, string> = {
   "attachments.fileUnsupported": "不支持该文件类型，请上传文本类文件。",
   "attachments.fileTooLarge": "文件过大，请控制在 64KB 以内。",
   "attachments.fileReadFailed": "文件读取失败，请检查文件内容。",
-  "attachments.linkInvalid": "请输入合法的 http 或 https 链接。",
-  "attachments.summaryRequired": "请填写标题和摘要后再添加链接。",
+  "attachments.summaryRequired": "请先确认文件摘要。",
   "attachments.summaryMissing": "请确认每条补充背景都有摘要。",
+  "source.fetchStatus.completed": "网页已读取",
+  "source.fetchStatus.failed": "网页读取失败",
+  "source.fetchErrorCode": "读取错误",
   "error.unknownRequest": "请求失败，请检查服务端状态。",
   "error.invalidRequest": "创建会话请求不完整。",
   "error.invalidRequest.recoveryHint": "请填写问题、语言区域和 Agent 配置后重试。",
+  "error.insufficientSourceContext": "议事已终止：URL 内容未能读取，缺少可讨论的议题上下文。",
+  "error.insufficientSourceContext.recoveryHint": "该站点可能拒绝服务端读取、需要登录/验证，或只允许特定客户端访问。请打开链接并把关键正文、摘要或截图文字粘贴到个人决策问题中，或上传文本文件后重新启动议事。",
   "error.invalidAgentConfig": "Agent 配置无效。",
   "error.invalidAgentConfig.recoveryHint": "请为主席、秘书和至少两个议员选择支持的模型与职责授权。",
   "error.providerConfig": "模型提供方配置不可用。",
@@ -397,6 +409,8 @@ const translations: Partial<Record<Locale, Partial<Record<TranslationKey, string
     "layout.showRolePanel": "顯示角色設定區",
     "layout.meetingOutput": "會議輸出",
     "layout.waitingOutput": "等待啟動議事",
+    "layout.preparingOutput": "正在讀取 URL 來源",
+    "layout.preparingOutput.detail": "系統正在嘗試讀取問題中的 URL，並判斷是否有足夠議題上下文。",
     "layout.activeAgent": "目前調度",
     "layout.currentSpeaker": "正在發言",
     "meetingStatus.label": "會議進度狀態",
@@ -404,10 +418,13 @@ const translations: Partial<Record<Locale, Partial<Record<TranslationKey, string
     "meetingStatus.activeAgent": "目前調度",
     "meetingStatus.currentSpeaker": "正在發言",
     "meetingStatus.waiting": "等待啟動",
+    "meetingStatus.preparing": "準備中",
     "meetingStatus.running": "執行中",
     "meetingStatus.active": "議事中",
     "meetingStatus.completed": "已完成",
     "meetingStatus.failed": "異常",
+    "meetingStatus.urlContentFetch": "URL 內容擷取",
+    "meetingStatus.system": "系統",
     "stream.thinking": "思考中",
     "stream.searchSources": "引用來源",
     "stream.thinkingDetails": "思考過程",
@@ -421,10 +438,7 @@ const translations: Partial<Record<Locale, Partial<Record<TranslationKey, string
     "attachments.file.help": "支援 .txt、.md、.csv、.json，讀取後請確認摘要。",
     "attachments.chooseFile": "選擇檔案",
     "attachments.noFileSelected": "未選擇檔案",
-    "attachments.linkUrl": "連結 URL",
-    "attachments.linkTitle": "連結標題",
-    "attachments.linkSummary": "連結摘要",
-    "attachments.addLink": "新增連結摘要",
+    "attachments.urlHint": "可直接在個人決策問題中貼上 URL，啟動議事時會嘗試讀取網頁內容。",
     "attachments.summary": "輸入摘要",
     "attachments.confirmed": "已確認",
     "attachments.remove": "移除",
@@ -432,12 +446,16 @@ const translations: Partial<Record<Locale, Partial<Record<TranslationKey, string
     "attachments.fileUnsupported": "不支援該檔案類型，請上傳文字類檔案。",
     "attachments.fileTooLarge": "檔案過大，請控制在 64KB 以內。",
     "attachments.fileReadFailed": "檔案讀取失敗，請檢查檔案內容。",
-    "attachments.linkInvalid": "請輸入合法的 http 或 https 連結。",
-    "attachments.summaryRequired": "請填寫標題和摘要後再新增連結。",
+    "attachments.summaryRequired": "請先確認檔案摘要。",
     "attachments.summaryMissing": "請確認每條補充背景都有摘要。",
+    "source.fetchStatus.completed": "網頁已讀取",
+    "source.fetchStatus.failed": "網頁讀取失敗",
+    "source.fetchErrorCode": "讀取錯誤",
     "error.unknownRequest": "請求失敗，請檢查服務端狀態。",
     "error.invalidRequest": "建立會話請求不完整。",
     "error.invalidRequest.recoveryHint": "請填寫問題、語言地區和 Agent 設定後重試。",
+    "error.insufficientSourceContext": "議事已終止：URL 內容未能讀取，缺少可討論的議題上下文。",
+    "error.insufficientSourceContext.recoveryHint": "該站點可能拒絕服務端讀取、需要登入/驗證，或只允許特定客戶端訪問。請打開連結並把關鍵正文、摘要或截圖文字貼到個人決策問題中，或上傳文字檔後重新啟動議事。",
     "error.invalidAgentConfig": "Agent 設定無效。",
     "error.invalidAgentConfig.recoveryHint": "請為主席、秘書和至少兩個議員選擇支援的模型與職責授權。",
     "error.providerConfig": "模型提供方設定不可用。",
@@ -569,6 +587,8 @@ const translations: Partial<Record<Locale, Partial<Record<TranslationKey, string
     "layout.showRolePanel": "Show Role Configuration",
     "layout.meetingOutput": "Meeting Output",
     "layout.waitingOutput": "Waiting to start deliberation",
+    "layout.preparingOutput": "Reading URL sources",
+    "layout.preparingOutput.detail": "RONR is reading URLs in the question and checking whether enough topic context is available.",
     "layout.activeAgent": "Active",
     "layout.currentSpeaker": "Speaking",
     "meetingStatus.label": "Meeting progress status",
@@ -576,10 +596,13 @@ const translations: Partial<Record<Locale, Partial<Record<TranslationKey, string
     "meetingStatus.activeAgent": "Active Agent",
     "meetingStatus.currentSpeaker": "Current Speaker",
     "meetingStatus.waiting": "Waiting",
+    "meetingStatus.preparing": "Preparing",
     "meetingStatus.running": "Running",
     "meetingStatus.active": "In progress",
     "meetingStatus.completed": "Completed",
     "meetingStatus.failed": "Failed",
+    "meetingStatus.urlContentFetch": "URL Content Fetch",
+    "meetingStatus.system": "System",
     "stream.thinking": "Thinking",
     "stream.searchSources": "Sources",
     "stream.thinkingDetails": "Thinking process",
@@ -593,10 +616,7 @@ const translations: Partial<Record<Locale, Partial<Record<TranslationKey, string
     "attachments.file.help": "Supports .txt, .md, .csv, .json. Review the summary before starting.",
     "attachments.chooseFile": "Choose file",
     "attachments.noFileSelected": "No file selected",
-    "attachments.linkUrl": "Link URL",
-    "attachments.linkTitle": "Link title",
-    "attachments.linkSummary": "Link summary",
-    "attachments.addLink": "Add link summary",
+    "attachments.urlHint": "Paste URLs directly into the personal decision question. RONR will try to read them when deliberation starts.",
     "attachments.summary": "Input summary",
     "attachments.confirmed": "Confirmed",
     "attachments.remove": "Remove",
@@ -604,12 +624,16 @@ const translations: Partial<Record<Locale, Partial<Record<TranslationKey, string
     "attachments.fileUnsupported": "Unsupported file type. Upload a text-based file.",
     "attachments.fileTooLarge": "The file is too large. Keep it under 64KB.",
     "attachments.fileReadFailed": "Could not read the file. Check the file content.",
-    "attachments.linkInvalid": "Enter a valid http or https link.",
-    "attachments.summaryRequired": "Enter a title and summary before adding the link.",
+    "attachments.summaryRequired": "Confirm the file summary first.",
     "attachments.summaryMissing": "Confirm that every supplemental context item has a summary.",
+    "source.fetchStatus.completed": "Page fetched",
+    "source.fetchStatus.failed": "Page fetch failed",
+    "source.fetchErrorCode": "Fetch error",
     "error.unknownRequest": "Request failed. Check the server status.",
     "error.invalidRequest": "The session request is incomplete.",
     "error.invalidRequest.recoveryHint": "Fill in the question, locale, and Agent configuration, then try again.",
+    "error.insufficientSourceContext": "Deliberation stopped: URL content could not be read, so there is not enough topic context.",
+    "error.insufficientSourceContext.recoveryHint": "The site may block server-side reads, require login or verification, or only allow a specific client. Open the link and paste the key article text, summary, or screenshot text into the question, or upload a text file before starting again.",
     "error.invalidAgentConfig": "Agent configuration is invalid.",
     "error.invalidAgentConfig.recoveryHint": "Select supported models and mandates for Chair, Secretary, and at least two Members.",
     "error.providerConfig": "Model provider configuration is unavailable.",
@@ -741,6 +765,8 @@ const translations: Partial<Record<Locale, Partial<Record<TranslationKey, string
     "layout.showRolePanel": "ロール設定を表示",
     "layout.meetingOutput": "会議出力",
     "layout.waitingOutput": "熟議開始待ち",
+    "layout.preparingOutput": "URL 出典を読み取り中",
+    "layout.preparingOutput.detail": "質問内の URL を読み取り、議題として扱う文脈が十分か確認しています。",
     "layout.activeAgent": "アクティブ",
     "layout.currentSpeaker": "発言中",
     "meetingStatus.label": "会議進行状況",
@@ -748,10 +774,13 @@ const translations: Partial<Record<Locale, Partial<Record<TranslationKey, string
     "meetingStatus.activeAgent": "アクティブ Agent",
     "meetingStatus.currentSpeaker": "発言中",
     "meetingStatus.waiting": "開始待ち",
+    "meetingStatus.preparing": "準備中",
     "meetingStatus.running": "実行中",
     "meetingStatus.active": "熟議中",
     "meetingStatus.completed": "完了",
     "meetingStatus.failed": "エラー",
+    "meetingStatus.urlContentFetch": "URL コンテンツ取得",
+    "meetingStatus.system": "システム",
     "stream.thinking": "思考中",
     "stream.searchSources": "参照元",
     "stream.thinkingDetails": "思考プロセス",
@@ -765,10 +794,7 @@ const translations: Partial<Record<Locale, Partial<Record<TranslationKey, string
     "attachments.file.help": ".txt、.md、.csv、.json に対応。読み込み後、要約を確認してください。",
     "attachments.chooseFile": "ファイルを選択",
     "attachments.noFileSelected": "ファイル未選択",
-    "attachments.linkUrl": "リンク URL",
-    "attachments.linkTitle": "リンクタイトル",
-    "attachments.linkSummary": "リンク要約",
-    "attachments.addLink": "リンク要約を追加",
+    "attachments.urlHint": "個人の意思決定質問に URL を直接貼り付けると、議事開始時にページ内容の読み取りを試みます。",
     "attachments.summary": "入力要約",
     "attachments.confirmed": "確認済み",
     "attachments.remove": "削除",
@@ -776,12 +802,16 @@ const translations: Partial<Record<Locale, Partial<Record<TranslationKey, string
     "attachments.fileUnsupported": "未対応のファイル形式です。テキスト系ファイルをアップロードしてください。",
     "attachments.fileTooLarge": "ファイルが大きすぎます。64KB 未満にしてください。",
     "attachments.fileReadFailed": "ファイルを読み取れませんでした。内容を確認してください。",
-    "attachments.linkInvalid": "有効な http または https リンクを入力してください。",
-    "attachments.summaryRequired": "リンクを追加する前にタイトルと要約を入力してください。",
+    "attachments.summaryRequired": "先にファイル要約を確認してください。",
     "attachments.summaryMissing": "すべての補足コンテキストに要約があることを確認してください。",
+    "source.fetchStatus.completed": "ページ取得済み",
+    "source.fetchStatus.failed": "ページ取得失敗",
+    "source.fetchErrorCode": "取得エラー",
     "error.unknownRequest": "リクエストに失敗しました。サーバー状態を確認してください。",
     "error.invalidRequest": "セッション作成リクエストが不完全です。",
     "error.invalidRequest.recoveryHint": "質問、ロケール、エージェント設定を入力してから再試行してください。",
+    "error.insufficientSourceContext": "熟議を停止しました：URL 内容を読み取れず、議題として扱う文脈が不足しています。",
+    "error.insufficientSourceContext.recoveryHint": "このサイトはサーバー側の読み取りを拒否する、ログイン/検証を要求する、または特定クライアントのみを許可している可能性があります。リンクを開き、重要な本文、要約、またはスクリーンショット内の文字を質問に貼り付けるか、テキストファイルをアップロードしてから再開してください。",
     "error.invalidAgentConfig": "エージェント設定が無効です。",
     "error.invalidAgentConfig.recoveryHint": "議長、書記、少なくとも2人の議員に対応モデルと任務権限を選択してください。",
     "error.providerConfig": "モデル提供元設定を利用できません。",
@@ -913,6 +943,8 @@ const translations: Partial<Record<Locale, Partial<Record<TranslationKey, string
     "layout.showRolePanel": "역할 구성 보이기",
     "layout.meetingOutput": "회의 출력",
     "layout.waitingOutput": "숙의 시작 대기",
+    "layout.preparingOutput": "URL 출처 읽는 중",
+    "layout.preparingOutput.detail": "질문 안의 URL을 읽고 논의할 의제 맥락이 충분한지 확인하고 있습니다.",
     "layout.activeAgent": "활성",
     "layout.currentSpeaker": "발언 중",
     "meetingStatus.label": "회의 진행 상태",
@@ -920,10 +952,13 @@ const translations: Partial<Record<Locale, Partial<Record<TranslationKey, string
     "meetingStatus.activeAgent": "활성 Agent",
     "meetingStatus.currentSpeaker": "발언 중",
     "meetingStatus.waiting": "시작 대기",
+    "meetingStatus.preparing": "준비 중",
     "meetingStatus.running": "실행 중",
     "meetingStatus.active": "숙의 중",
     "meetingStatus.completed": "완료됨",
     "meetingStatus.failed": "오류",
+    "meetingStatus.urlContentFetch": "URL 콘텐츠 가져오기",
+    "meetingStatus.system": "시스템",
     "stream.thinking": "생각 중",
     "stream.searchSources": "인용 출처",
     "stream.thinkingDetails": "사고 과정",
@@ -937,10 +972,7 @@ const translations: Partial<Record<Locale, Partial<Record<TranslationKey, string
     "attachments.file.help": ".txt, .md, .csv, .json을 지원합니다. 시작 전에 요약을 검토하세요.",
     "attachments.chooseFile": "파일 선택",
     "attachments.noFileSelected": "선택된 파일 없음",
-    "attachments.linkUrl": "링크 URL",
-    "attachments.linkTitle": "링크 제목",
-    "attachments.linkSummary": "링크 요약",
-    "attachments.addLink": "링크 요약 추가",
+    "attachments.urlHint": "개인 의사결정 질문에 URL을 직접 붙여 넣으면, 회의를 시작할 때 페이지 내용을 읽어 봅니다.",
     "attachments.summary": "입력 요약",
     "attachments.confirmed": "확인됨",
     "attachments.remove": "삭제",
@@ -948,12 +980,16 @@ const translations: Partial<Record<Locale, Partial<Record<TranslationKey, string
     "attachments.fileUnsupported": "지원하지 않는 파일 형식입니다. 텍스트 기반 파일을 업로드하세요.",
     "attachments.fileTooLarge": "파일이 너무 큽니다. 64KB 미만으로 유지하세요.",
     "attachments.fileReadFailed": "파일을 읽을 수 없습니다. 파일 내용을 확인하세요.",
-    "attachments.linkInvalid": "유효한 http 또는 https 링크를 입력하세요.",
-    "attachments.summaryRequired": "링크를 추가하기 전에 제목과 요약을 입력하세요.",
+    "attachments.summaryRequired": "먼저 파일 요약을 확인하세요.",
     "attachments.summaryMissing": "모든 보충 맥락 항목에 요약이 있는지 확인하세요.",
+    "source.fetchStatus.completed": "페이지 읽기 완료",
+    "source.fetchStatus.failed": "페이지 읽기 실패",
+    "source.fetchErrorCode": "읽기 오류",
     "error.unknownRequest": "요청에 실패했습니다. 서버 상태를 확인하세요.",
     "error.invalidRequest": "세션 생성 요청이 완전하지 않습니다.",
     "error.invalidRequest.recoveryHint": "질문, 로케일, 에이전트 구성을 입력한 뒤 다시 시도하세요.",
+    "error.insufficientSourceContext": "숙의를 중단했습니다. URL 내용을 읽지 못해 논의할 의제 맥락이 부족합니다.",
+    "error.insufficientSourceContext.recoveryHint": "이 사이트가 서버 측 읽기를 차단하거나, 로그인/검증을 요구하거나, 특정 클라이언트만 허용할 수 있습니다. 링크를 열어 핵심 본문, 요약 또는 스크린샷의 텍스트를 질문에 붙여 넣거나 텍스트 파일을 업로드한 뒤 다시 시작하세요.",
     "error.invalidAgentConfig": "에이전트 구성이 올바르지 않습니다.",
     "error.invalidAgentConfig.recoveryHint": "의장, 서기, 최소 두 명의 의원에 지원되는 모델과 책무 위임을 선택하세요.",
     "error.providerConfig": "모델 제공자 구성을 사용할 수 없습니다.",

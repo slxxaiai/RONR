@@ -584,7 +584,7 @@ describe("API handlers", () => {
     ).resolves.toBe(404);
   });
 
-  test("POST sessions accepts confirmed attachment summaries and returns source references", async () => {
+  test("POST sessions fetches URLs from the question and returns source references", async () => {
     const outputs = [
       {
         goal: "评估买房时机",
@@ -610,7 +610,7 @@ describe("API handlers", () => {
         reservation: ""
       },
       {
-        speech: "链接摘要提示需要复核资格。",
+        speech: "URL 来源提示需要复核资格。",
         claims: [],
         assumptions: [],
         objection: {
@@ -631,16 +631,22 @@ describe("API handlers", () => {
         actionItems: [
           {
             title: "核算预算",
-            rationale: "附件提供了首付和政策约束。",
+            rationale: "附件和 URL 来源提供了首付和政策约束。",
             conditions: ["保留现金流", "复核资格"],
             firstValidation: "完成预算表",
-            sourceRefs: ["att-file-1", "att-link-1"]
+            sourceRefs: ["att-file-1", "source-url-1"]
           }
         ]
       }
     ];
     const chatBodies: Array<Record<string, unknown>> = [];
     const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === "https://example.com/policy") {
+        return new Response(
+          "<html><head><title>政策页面</title></head><body><main>购房资格需要复核，贷款政策也需要检查。</main></body></html>",
+          { status: 200, headers: { "Content-Type": "text/html; charset=utf-8" } }
+        );
+      }
       if (url === "https://api.ppio.com/v3/web-search") {
         return new Response(
           JSON.stringify({ data: { results: [{ title: "Source", url: "https://example.com/source" }] } }),
@@ -662,7 +668,7 @@ describe("API handlers", () => {
 
     const response = await handleCreateSession(
       {
-        userQuestion: "我应该现在买房吗？",
+        userQuestion: "我应该现在买房吗？请参考 https://example.com/policy",
         locale: "zh-CN",
         attachments: [
           {
@@ -673,15 +679,6 @@ describe("API handlers", () => {
             fileName: "budget.txt",
             mimeType: "text/plain",
             sizeBytes: 120,
-            confirmedByUser: true,
-            readAt: "2026-06-18T00:00:00.000Z"
-          },
-          {
-            id: "att-link-1",
-            type: "link",
-            title: "政策链接",
-            summary: "购房资格需要复核。",
-            url: "https://example.com/policy",
             confirmedByUser: true,
             readAt: "2026-06-18T00:00:00.000Z"
           }
@@ -714,14 +711,598 @@ describe("API handlers", () => {
     expect(payload.sessionSnapshot.sourceReferences).toEqual([
       expect.objectContaining({ id: "source-text-input", type: "text_input" }),
       expect.objectContaining({ id: "att-file-1", type: "file_input", fileName: "budget.txt" }),
-      expect.objectContaining({ id: "att-link-1", type: "link_input", url: "https://example.com/policy" })
+      expect.objectContaining({
+        id: "source-url-1",
+        type: "url_input",
+        title: "政策页面",
+        url: "https://example.com/policy",
+        fetchStatus: "completed"
+      })
     ]);
     expect(JSON.stringify(chatBodies[0])).toContain("Source Reference: att-file-1");
-    expect(JSON.stringify(chatBodies[0])).toContain("Source Reference: att-link-1");
+    expect(JSON.stringify(chatBodies[0])).toContain("Source Reference: source-url-1");
+    expect(JSON.stringify(chatBodies[0])).toContain("Fetch Status: completed");
+    expect(fetchMock.mock.calls.find(([url]) => url === "https://example.com/policy")?.[1]?.headers).toMatchObject({
+      "Accept-Language": expect.stringMatching(/^zh-CN,zh;q=0\.9/)
+    });
     expect(JSON.stringify(payload.providerMeta)).not.toContain("local-api-key-value");
   });
 
-  test("POST sessions rejects malformed attachments before provider calls", async () => {
+  test("POST sessions keeps running when URL fetch fails and records failed source reference", async () => {
+    const outputs = [
+      {
+        goal: "评估买房时机",
+        constraints: [],
+        mainMotion: { title: "先做买房可行性评估", description: "在来源不可用时先基于已知约束讨论" },
+        nextTask: "Member 发言"
+      },
+      {
+        speech: "即使 URL 不可读，也可以先明确预算和风险。",
+        claims: [],
+        assumptions: [],
+        objection: {
+          type: "risk",
+          description: "缺少页面正文会降低政策判断置信度。",
+          severity: "medium",
+          condition: "后续人工复核 URL"
+        },
+        vote: {
+          position: "qualified_support",
+          reason: "先讨论框架，后复核来源。",
+          conditions: ["人工复核 URL"]
+        },
+        reservation: ""
+      },
+      {
+        speech: "失败来源不能作为事实依据。",
+        claims: [],
+        assumptions: [],
+        objection: {
+          type: "constraint_conflict",
+          description: "来源不可用时不能确认资格。",
+          severity: "high",
+          condition: "补充可读来源"
+        },
+        vote: {
+          position: "qualified_support",
+          reason: "补充来源后支持。",
+          conditions: ["补充可读来源"]
+        },
+        reservation: ""
+      },
+      {
+        summary: "先形成问题清单，随后复核 URL。",
+        actionItems: [
+          {
+            title: "复核 URL",
+            rationale: "自动读取失败，需要保留来源追溯。",
+            conditions: ["人工复核 URL"],
+            firstValidation: "打开来源并记录政策摘要",
+            sourceRefs: ["source-url-1"]
+          }
+        ]
+      }
+    ];
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === "https://example.com/unavailable") {
+        throw new Error("network failed");
+      }
+      if (url === "https://api.ppio.com/v3/web-search") {
+        return new Response(
+          JSON.stringify({ data: { results: [{ title: "Source", url: "https://example.com/source" }] } }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }
+      const body = JSON.parse(String(init?.body));
+      return new Response(
+        JSON.stringify({
+          id: `raw-${outputs.length}`,
+          model: body.model,
+          choices: [{ finish_reason: "stop", index: 0, message: { role: "assistant", content: JSON.stringify(outputs.shift()) } }],
+          usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 }
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      );
+    });
+
+    const response = await handleCreateSession(
+      {
+        userQuestion: "我应该现在买房吗？https://example.com/unavailable",
+        locale: "zh-CN",
+        agentConfig: {
+          chair: { model: "model-a" },
+          secretary: { model: "model-a" },
+          members: [
+            { id: "member-user", model: "model-a", mandate: "user-advocate" },
+            { id: "member-red", model: "model-a", mandate: "red-team" }
+          ]
+        }
+      },
+      fetchMock,
+      {
+        providerProfileId: "ppio-default",
+        displayName: "PPIO",
+        protocol: "openai-compatible",
+        baseURL: "https://api.ppio.com/openai/v1",
+        apiKey: "local-api-key-value",
+        timeoutMs: 30000,
+        temperatureDefault: 0.2,
+        maxTokensDefault: 1200
+      },
+      ["model-a"]
+    );
+
+    expect(response.status).toBe(200);
+    const payload = await response.json();
+    expect(payload.sessionSnapshot.sourceReferences).toEqual([
+      expect.objectContaining({ id: "source-text-input", type: "text_input" }),
+      expect.objectContaining({
+        id: "source-url-1",
+        type: "url_input",
+        url: "https://example.com/unavailable",
+        fetchStatus: "failed",
+        fetchErrorCode: "url_fetch_failed"
+      })
+    ]);
+  });
+
+  test("POST sessions runs full deliberation for a mixed WeChat URL and stock question input", async () => {
+    const wechatUrl = "https://mp.weixin.qq.com/s/F3KD4cEmwisijZcbyRYAIw";
+    const outputs = [
+      {
+        goal: "判断智谱股票是否值得加仓",
+        constraints: ["参考微信文章中的估值反转背景", "涉及投资风险，需要条件化输出"],
+        mainMotion: {
+          title: "审慎评估智谱股票加仓",
+          description: "结合文章背景、估值和仓位约束判断是否加仓"
+        },
+        nextTask: "Member 发言"
+      },
+      {
+        speech: "文章提供估值分化背景，但是否加仓还需要当前价格和仓位信息。",
+        claims: [],
+        assumptions: ["用户已经持有智谱股票"],
+        objection: {
+          type: "risk",
+          description: "单一文章不足以支持直接加仓。",
+          severity: "high",
+          condition: "补充实时行情和仓位上限"
+        },
+        vote: {
+          position: "qualified_support",
+          reason: "满足估值和仓位条件时才支持小幅加仓。",
+          conditions: ["补充实时行情", "设置止损"]
+        },
+        reservation: "不要把文章叙事直接等同于投资结论。"
+      },
+      {
+        speech: "文章提到估值已脱离传统框架，这本身是风险信号。",
+        claims: [],
+        assumptions: [],
+        objection: {
+          type: "counterexample",
+          description: "叙事驱动上涨可能快速反转。",
+          severity: "blocking",
+          condition: "交叉验证基本面和政策窗口"
+        },
+        vote: {
+          position: "oppose",
+          reason: "缺少实时估值和仓位信息前，不建议直接加仓。",
+          conditions: []
+        },
+        reservation: "可以先做观察清单。"
+      },
+      {
+        summary: "暂不直接加仓，先核验行情、估值和仓位约束。",
+        actionItems: [
+          {
+            title: "核验智谱当前价格与估值",
+            rationale: "微信文章提供背景，但需要最新市场数据确认安全边际。",
+            conditions: ["获取当前股价和市值", "确认个人仓位比例"],
+            firstValidation: "记录当前价格、市值、仓位占比和止损点",
+            sourceRefs: ["source-url-1"]
+          }
+        ]
+      }
+    ];
+    const chatBodies: Array<Record<string, unknown>> = [];
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === wechatUrl) {
+        return new Response(
+          `
+            <html>
+              <head><meta property="og:title" content="大模型估值大反转" /></head>
+              <body>
+                <div id="js_content">
+                  <p>1月8日，智谱在港交所挂牌，发行价116.2港元。</p>
+                  <p>MiniMax跟着上市，后来两家公司估值出现明显分化。</p>
+                </div>
+              </body>
+            </html>
+          `,
+          { status: 200, headers: { "Content-Type": "text/html; charset=utf-8" } }
+        );
+      }
+      if (url === "https://api.ppio.com/v3/web-search") {
+        return new Response(
+          JSON.stringify({ data: { results: [{ title: "Market source", url: "https://example.com/market" }] } }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }
+      const body = JSON.parse(String(init?.body));
+      chatBodies.push(body);
+      return new Response(
+        JSON.stringify({
+          id: `raw-${outputs.length}`,
+          model: body.model,
+          choices: [{ finish_reason: "stop", index: 0, message: { role: "assistant", content: JSON.stringify(outputs.shift()) } }],
+          usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 }
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      );
+    });
+
+    const response = await handleCreateSession(
+      {
+        userQuestion: "参考https://mp.weixin.qq.com/s/F3KD4cEmwisijZcbyRYAIw，目前智谱股票是否值得加仓",
+        locale: "zh-CN",
+        agentConfig: {
+          chair: { model: "model-a" },
+          secretary: { model: "model-a" },
+          members: [
+            { id: "member-user", model: "model-a", mandate: "user-advocate" },
+            { id: "member-red", model: "model-a", mandate: "red-team" }
+          ]
+        }
+      },
+      fetchMock,
+      {
+        providerProfileId: "ppio-default",
+        displayName: "PPIO",
+        protocol: "openai-compatible",
+        baseURL: "https://api.ppio.com/openai/v1",
+        apiKey: "local-api-key-value",
+        timeoutMs: 30000,
+        temperatureDefault: 0.2,
+        maxTokensDefault: 1200
+      },
+      ["model-a"]
+    );
+
+    expect(response.status).toBe(200);
+    const payload = await response.json();
+    expect(payload.status).toBe("completed");
+    expect(payload.phase).toBe("action_resolution");
+    expect(fetchMock.mock.calls.some(([url]) => url === wechatUrl)).toBe(true);
+    expect(fetchMock.mock.calls.every(([url]) => !String(url).includes("，目前智谱"))).toBe(true);
+    expect(payload.sessionSnapshot.sourceReferences).toEqual([
+      expect.objectContaining({
+        id: "source-text-input",
+        type: "text_input",
+        summary: expect.stringContaining("目前智谱股票是否值得加仓")
+      }),
+      expect.objectContaining({
+        id: "source-url-1",
+        type: "url_input",
+        title: "大模型估值大反转",
+        url: wechatUrl,
+        fetchStatus: "completed",
+        summary: expect.stringContaining("智谱在港交所挂牌")
+      })
+    ]);
+    expect(JSON.stringify(chatBodies[0])).toContain("目前智谱股票是否值得加仓");
+    expect(JSON.stringify(chatBodies[0])).toContain("Source Reference: source-url-1");
+    expect(payload.sessionSnapshot.actionPlan.items[0]?.sourceRefs).toContain("source-url-1");
+  });
+
+  test("POST sessions terminates before provider calls when URL-only input cannot be read", async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url === "https://mp.weixin.qq.com/s/example") {
+        return new Response(
+          "<html><head><title>访问环境异常</title></head><body>请在微信客户端打开链接后继续访问。</body></html>",
+          { status: 200, headers: { "Content-Type": "text/html; charset=utf-8" } }
+        );
+      }
+      throw new Error(`unexpected provider call: ${url}`);
+    });
+
+    const response = await handleCreateSession(
+      {
+        userQuestion: "https://mp.weixin.qq.com/s/example",
+        locale: "zh-CN",
+        agentConfig: {
+          chair: { model: "model-a" },
+          secretary: { model: "model-a" },
+          members: [
+            { id: "member-user", model: "model-a", mandate: "user-advocate" },
+            { id: "member-red", model: "model-a", mandate: "red-team" }
+          ]
+        }
+      },
+      fetchMock,
+      {
+        providerProfileId: "ppio-default",
+        displayName: "PPIO",
+        protocol: "openai-compatible",
+        baseURL: "https://api.ppio.com/openai/v1",
+        apiKey: "local-api-key-value",
+        timeoutMs: 30000,
+        temperatureDefault: 0.2,
+        maxTokensDefault: 1200
+      },
+      ["model-a"]
+    );
+
+    expect(response.status).toBe(422);
+    await expect(response.json()).resolves.toMatchObject({
+      code: "insufficient_source_context",
+      message: expect.stringContaining("议事已终止"),
+      recoveryHint: expect.stringContaining("url_access_restricted")
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  test("POST sessions terminates with access-restricted reason for URL-only Zhihu input", async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url === "https://zhuanlan.zhihu.com/p/359677510") {
+        return new Response(
+          "<html><head><meta id=\"zh-zse-ck\" charset=\"UTF-8\" content=\"mock\"></head><body><script src=\"https://static.zhihu.com/zse-ck/v4/mock.js\"></script></body></html>",
+          { status: 403, headers: { "Content-Type": "text/html; charset=utf-8" } }
+        );
+      }
+      throw new Error(`unexpected provider call: ${url}`);
+    });
+
+    const response = await handleCreateSession(
+      {
+        userQuestion: "https://zhuanlan.zhihu.com/p/359677510",
+        locale: "zh-CN",
+        agentConfig: {
+          chair: { model: "model-a" },
+          secretary: { model: "model-a" },
+          members: [
+            { id: "member-user", model: "model-a", mandate: "user-advocate" },
+            { id: "member-red", model: "model-a", mandate: "red-team" }
+          ]
+        }
+      },
+      fetchMock,
+      {
+        providerProfileId: "ppio-default",
+        displayName: "PPIO",
+        protocol: "openai-compatible",
+        baseURL: "https://api.ppio.com/openai/v1",
+        apiKey: "local-api-key-value",
+        timeoutMs: 30000,
+        temperatureDefault: 0.2,
+        maxTokensDefault: 1200
+      },
+      ["model-a"]
+    );
+
+    expect(response.status).toBe(422);
+    await expect(response.json()).resolves.toMatchObject({
+      code: "insufficient_source_context",
+      message: expect.stringContaining("议事已终止"),
+      recoveryHint: expect.stringContaining("站点拒绝服务端读取")
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  test("POST sessions treats URL workflow wording as insufficient context when the URL cannot be read", async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url === "https://zhuanlan.zhihu.com/p/359677510") {
+        return new Response(
+          "<html><head><meta id=\"zh-zse-ck\" charset=\"UTF-8\" content=\"mock\"></head><body><script src=\"https://static.zhihu.com/zse-ck/v4/mock.js\"></script></body></html>",
+          { status: 403, headers: { "Content-Type": "text/html; charset=utf-8" } }
+        );
+      }
+      throw new Error(`unexpected provider call: ${url}`);
+    });
+
+    const response = await handleCreateSession(
+      {
+        userQuestion: "用'https://zhuanlan.zhihu.com/p/359677510'创建议题",
+        locale: "zh-CN",
+        agentConfig: {
+          chair: { model: "model-a" },
+          secretary: { model: "model-a" },
+          members: [
+            { id: "member-user", model: "model-a", mandate: "user-advocate" },
+            { id: "member-red", model: "model-a", mandate: "red-team" }
+          ]
+        }
+      },
+      fetchMock,
+      {
+        providerProfileId: "ppio-default",
+        displayName: "PPIO",
+        protocol: "openai-compatible",
+        baseURL: "https://api.ppio.com/openai/v1",
+        apiKey: "local-api-key-value",
+        timeoutMs: 30000,
+        temperatureDefault: 0.2,
+        maxTokensDefault: 1200
+      },
+      ["model-a"]
+    );
+
+    expect(response.status).toBe(422);
+    await expect(response.json()).resolves.toMatchObject({
+      code: "insufficient_source_context",
+      message: expect.stringContaining("议事已终止"),
+      recoveryHint: expect.stringContaining("站点拒绝服务端读取")
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  test("POST session stream emits a termination error for unreadable URL-only input", async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url === "https://example.com/unavailable") {
+        throw new Error("network failed");
+      }
+      throw new Error(`unexpected provider call: ${url}`);
+    });
+
+    const response = await handleCreateSessionStream(
+      {
+        userQuestion: "https://example.com/unavailable",
+        locale: "zh-CN",
+        agentConfig: {
+          chair: { model: "model-a" },
+          secretary: { model: "model-a" },
+          members: [
+            { id: "member-user", model: "model-a", mandate: "user-advocate" },
+            { id: "member-red", model: "model-a", mandate: "red-team" }
+          ]
+        }
+      },
+      fetchMock,
+      {
+        providerProfileId: "ppio-default",
+        displayName: "PPIO",
+        protocol: "openai-compatible",
+        baseURL: "https://api.ppio.com/openai/v1",
+        apiKey: "local-api-key-value",
+        timeoutMs: 30000,
+        temperatureDefault: 0.2,
+        maxTokensDefault: 1200
+      },
+      ["model-a"]
+    );
+
+    const events = await readNdjsonResponse(response);
+    expect(events).toEqual([
+      expect.objectContaining({
+        type: "error",
+        code: "insufficient_source_context",
+        message: expect.stringContaining("议事已终止"),
+        recoveryHint: expect.stringContaining("url_fetch_failed")
+      })
+    ]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  test("POST session stream includes fetched URL sources in the completed snapshot", async () => {
+    const outputs = [
+      {
+        goal: "评估买房时机",
+        constraints: ["需要复核政策 URL"],
+        mainMotion: { title: "先做买房可行性评估", description: "结合 URL 来源判断是否推进" },
+        nextTask: "Member 发言"
+      },
+      {
+        speech: "URL 来源显示需要复核购房资格。",
+        claims: [],
+        assumptions: [],
+        objection: {
+          type: "constraint_conflict",
+          description: "政策资格可能限制推进。",
+          severity: "high",
+          condition: "复核资格"
+        },
+        vote: {
+          position: "qualified_support",
+          reason: "复核后支持。",
+          conditions: ["复核资格"]
+        },
+        reservation: ""
+      },
+      {
+        speech: "还需要现金流安全垫。",
+        claims: [],
+        assumptions: [],
+        objection: {
+          type: "risk",
+          description: "现金流不足。",
+          severity: "medium",
+          condition: "保留现金流"
+        },
+        vote: {
+          position: "qualified_support",
+          reason: "满足现金流条件时支持。",
+          conditions: ["保留现金流"]
+        },
+        reservation: ""
+      },
+      {
+        summary: "先复核 URL 来源和预算。",
+        actionItems: [
+          {
+            title: "复核政策 URL",
+            rationale: "URL 来源进入 Chair 上下文。",
+            conditions: ["复核资格"],
+            firstValidation: "记录政策摘要",
+            sourceRefs: ["source-url-1"]
+          }
+        ]
+      }
+    ];
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === "https://example.com/policy") {
+        return new Response("购房资格需要复核。", {
+          status: 200,
+          headers: { "Content-Type": "text/plain" }
+        });
+      }
+      if (url === "https://api.ppio.com/v3/web-search") {
+        return new Response(
+          JSON.stringify({ data: { results: [{ title: "Source", url: "https://example.com/source" }] } }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }
+      const body = JSON.parse(String(init?.body));
+      return new Response(
+        JSON.stringify({
+          id: `raw-${outputs.length}`,
+          model: body.model,
+          choices: [{ finish_reason: "stop", index: 0, message: { role: "assistant", content: JSON.stringify(outputs.shift()) } }],
+          usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 }
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      );
+    });
+
+    const response = await handleCreateSessionStream(
+      {
+        userQuestion: "我应该现在买房吗？参考 https://example.com/policy",
+        locale: "zh-CN",
+        agentConfig: {
+          chair: { model: "model-a" },
+          secretary: { model: "model-a" },
+          members: [
+            { id: "member-user", model: "model-a", mandate: "user-advocate" },
+            { id: "member-red", model: "model-a", mandate: "red-team" }
+          ]
+        }
+      },
+      fetchMock,
+      {
+        providerProfileId: "ppio-default",
+        displayName: "PPIO",
+        protocol: "openai-compatible",
+        baseURL: "https://api.ppio.com/openai/v1",
+        apiKey: "local-api-key-value",
+        timeoutMs: 30000,
+        temperatureDefault: 0.2,
+        maxTokensDefault: 1200
+      },
+      ["model-a"]
+    );
+
+    const events = await readNdjsonResponse(response);
+    expect(events.at(-1)?.sessionSnapshot.sourceReferences).toEqual([
+      expect.objectContaining({ id: "source-text-input", type: "text_input" }),
+      expect.objectContaining({
+        id: "source-url-1",
+        type: "url_input",
+        url: "https://example.com/policy",
+        fetchStatus: "completed"
+      })
+    ]);
+  });
+
+  test("POST sessions rejects legacy link attachments before provider calls", async () => {
     const fetchMock = vi.fn();
 
     const response = await handleCreateSession(
